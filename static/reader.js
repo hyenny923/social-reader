@@ -72,6 +72,46 @@ function normalizeRect(domRect, container) {
   };
 }
 
+// 같은 줄에 있는 rect들을 하나의 연속된 rect로 합침 (스페이스 틈 제거)
+function mergeRectsPerLine(domRects) {
+  if (!domRects.length) return [];
+
+  // Y 좌표 기준으로 정렬
+  const sorted = [...domRects].sort((a, b) => a.top - b.top || a.left - b.left);
+
+  const lines = [];
+  let current = null;
+
+  for (const r of sorted) {
+    if (!current) {
+      current = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+      continue;
+    }
+    // 같은 줄 판단: Y 중심이 현재 줄 범위 안에 있으면 같은 줄
+    const rMid = r.top + r.height / 2;
+    if (rMid >= current.top - 2 && rMid <= current.bottom + 2) {
+      // 같은 줄 → 좌우로 확장
+      current.left   = Math.min(current.left,   r.left);
+      current.right  = Math.max(current.right,  r.right);
+      current.top    = Math.min(current.top,    r.top);
+      current.bottom = Math.max(current.bottom, r.bottom);
+    } else {
+      // 새로운 줄
+      lines.push(current);
+      current = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    }
+  }
+  if (current) lines.push(current);
+
+  // DOMRect 형태로 변환
+  return lines.map(l => ({
+    left:   l.left,
+    top:    l.top,
+    width:  l.right - l.left,
+    height: l.bottom - l.top,
+  }));
+}
+
 function toPixels(nr, container) {
   return {
     x: nr.x * container.clientWidth,
@@ -162,10 +202,11 @@ function setupPageEvents(wrapper, svg, pageNum) {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
     const range = sel.getRangeAt(0);
-    const domRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
-    if (!domRects.length) return;
+    const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
+    if (!rawRects.length) return;
 
-    const rects = domRects.map(r => normalizeRect(r, wrapper));
+    const mergedRects = mergeRectsPerLine(rawRects);
+    const rects = mergedRects.map(r => normalizeRect(r, wrapper));
     const selectedText = sel.toString().trim().slice(0, 200);
     sel.removeAllRanges();
 
