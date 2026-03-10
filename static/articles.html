@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Reader — Articles</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <span class="logo">📖 <span>Social</span>Reader</span>
+  <div class="header-right">
+    <div class="user-badge">
+      <span id="user-name"></span>
+      <span class="role-tag" id="user-role"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()">Sign out</button>
+  </div>
+</header>
+
+<main class="page-body">
+  <h2 class="page-title">Reading List</h2>
+  <p class="page-sub">Select an article to begin annotating.</p>
+
+  <!-- Instructor upload panel -->
+  <div class="upload-panel" id="upload-panel" style="display:none">
+    <h3>Upload New Article</h3>
+    <form id="upload-form">
+      <div class="upload-row">
+        <div class="form-group">
+          <input id="article-title" type="text" placeholder="Article title…" required />
+        </div>
+        <label class="file-label">
+          📎 Choose PDF
+          <input id="article-file" type="file" accept=".pdf" required />
+        </label>
+        <button class="btn-upload" type="submit">Upload</button>
+      </div>
+      <div class="file-name" id="file-name">No file selected</div>
+      <div class="error-msg" id="upload-error"></div>
+    </form>
+  </div>
+
+  <!-- Articles list -->
+  <div id="articles-container">
+    <div class="loading-wrap"><div class="spinner"></div></div>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+  if (!requireAuth()) throw new Error('redirect');
+
+  const user = getUser();
+  document.getElementById('user-name').textContent = user.display_name;
+  document.getElementById('user-role').textContent = user.role === 'instructor' ? 'Instructor' : 'Student';
+  if (user.role === 'instructor') document.getElementById('upload-panel').style.display = 'block';
+
+  // File name preview
+  document.getElementById('article-file').addEventListener('change', e => {
+    document.getElementById('file-name').textContent = e.target.files[0]?.name || 'No file selected';
+  });
+
+  // Upload
+  document.getElementById('upload-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    const err = document.getElementById('upload-error');
+    err.textContent = '';
+    const title = document.getElementById('article-title').value.trim();
+    const file  = document.getElementById('article-file').files[0];
+    if (!title || !file) return;
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    try {
+      const fd = new FormData();
+      fd.append('title', title);
+      fd.append('file', file);
+      await API.postForm('/api/articles', fd);
+      document.getElementById('article-title').value = '';
+      document.getElementById('article-file').value = '';
+      document.getElementById('file-name').textContent = 'No file selected';
+      showToast('Article uploaded!');
+      loadArticles();
+    } catch (ex) {
+      err.textContent = ex.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Upload';
+    }
+  });
+
+  async function loadArticles() {
+    const container = document.getElementById('articles-container');
+    container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+    try {
+      const articles = await API.get('/api/articles');
+      if (!articles.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">📄</div>
+            <p>No articles yet. ${user.role === 'instructor' ? 'Upload one above!' : 'Ask your instructor to upload articles.'}</p>
+          </div>`;
+        return;
+      }
+      container.innerHTML = '<div class="articles-grid" id="articles-grid"></div>';
+      const grid = document.getElementById('articles-grid');
+      articles.forEach(a => {
+        const card = document.createElement('div');
+        card.className = 'article-card';
+        card.innerHTML = `
+          <div class="article-info">
+            <h4>${escHtml(a.title)}</h4>
+            <div class="article-meta">Uploaded by ${escHtml(a.uploaded_by_name)} · ${fmtDate(a.created_at)}</div>
+          </div>
+          <div class="article-actions">
+            ${user.role === 'instructor' ? `<button class="btn-delete" data-id="${a.id}">Delete</button>` : ''}
+            <button class="btn-read" data-id="${a.id}">Read →</button>
+          </div>`;
+        grid.appendChild(card);
+      });
+
+      grid.querySelectorAll('.btn-read').forEach(btn => {
+        btn.addEventListener('click', () => window.location.href = `/reader/${btn.dataset.id}`);
+      });
+      grid.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('Delete this article and all its annotations?')) return;
+          btn.disabled = true;
+          try {
+            await API.del(`/api/articles/${btn.dataset.id}`);
+            showToast('Article deleted.');
+            loadArticles();
+          } catch { btn.disabled = false; }
+        });
+      });
+    } catch (ex) {
+      container.innerHTML = `<p style="color:var(--danger);padding:20px">${ex.message}</p>`;
+    }
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function fmtDate(s) {
+    return new Date(s + 'Z').toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+  }
+
+  loadArticles();
+</script>
+</body>
+</html>

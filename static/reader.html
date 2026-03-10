@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Reader</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="reader-layout">
+
+  <!-- Toolbar -->
+  <div class="reader-toolbar">
+    <button class="btn-back" onclick="history.length>1?history.back():location.href='/articles'">
+      ← Articles
+    </button>
+    <div class="toolbar-sep"></div>
+    <div class="toolbar-title" id="article-title">Loading…</div>
+    <div class="toolbar-sep"></div>
+
+    <!-- Tools -->
+    <button class="tool-btn" id="tool-select" title="Select / Pan">
+      <span class="tool-icon">↖</span> <span>Select</span>
+    </button>
+    <button class="tool-btn" id="tool-highlight" title="Highlight text">
+      <span class="tool-icon">▌</span> <span>Highlight</span>
+    </button>
+    <button class="tool-btn" id="tool-underline" title="Underline text">
+      <span class="tool-icon">U̲</span> <span>Underline</span>
+    </button>
+    <button class="tool-btn" id="tool-note" title="Add a note">
+      <span class="tool-icon">✎</span> <span>Note</span>
+    </button>
+    <button class="tool-btn" id="tool-erase" title="Delete annotation (click on it)">
+      <span class="tool-icon">✕</span> <span>Erase</span>
+    </button>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Color swatches -->
+    <div class="color-swatches" id="color-swatches">
+      <div class="color-swatch selected" data-color="#FFD700" style="background:#FFD700" title="Yellow"></div>
+      <div class="color-swatch" data-color="#86EFAC" style="background:#86EFAC" title="Green"></div>
+      <div class="color-swatch" data-color="#93C5FD" style="background:#93C5FD" title="Blue"></div>
+      <div class="color-swatch" data-color="#FCA5A5" style="background:#FCA5A5" title="Red"></div>
+      <div class="color-swatch" data-color="#C4B5FD" style="background:#C4B5FD" title="Purple"></div>
+    </div>
+
+    <div class="toolbar-sep"></div>
+    <button class="btn-sidebar-toggle" id="sidebar-toggle" title="Toggle annotation panel">☰</button>
+  </div>
+
+  <!-- Body: PDF + Sidebar -->
+  <div class="reader-body">
+    <div class="pdf-viewer" id="pdf-viewer">
+      <div class="loading-wrap"><div class="spinner"></div></div>
+    </div>
+    <div class="reader-sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h3>Annotations</h3>
+        <span class="sidebar-count" id="sidebar-count">0</span>
+      </div>
+      <div class="sidebar-list" id="sidebar-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Note modal -->
+<div class="modal-overlay" id="note-modal">
+  <div class="modal">
+    <h3>Add Note</h3>
+    <textarea id="note-text" placeholder="Write your note here…" rows="4"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="note-cancel">Cancel</button>
+      <button class="btn-save" id="note-save">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/reader.js"></script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Reader — Sign In</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <h1>📖 Social Reader</h1>
+    <p class="subtitle">Collaborative reading for your seminar</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="login">Sign In</button>
+      <button class="tab-btn" data-tab="register">Register</button>
+    </div>
+
+    <!-- Login -->
+    <form id="login-form" class="tab-panel">
+      <div class="form-group">
+        <label>Username</label>
+        <input id="login-username" type="text" placeholder="your username" autocomplete="username" required />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+      </div>
+      <button class="btn-primary" type="submit">Sign In</button>
+      <div class="error-msg" id="login-error"></div>
+    </form>
+
+    <!-- Register -->
+    <form id="register-form" class="tab-panel" style="display:none">
+      <div class="form-group">
+        <label>Display Name</label>
+        <input id="reg-name" type="text" placeholder="Your Full Name" required />
+      </div>
+      <div class="form-group">
+        <label>Username</label>
+        <input id="reg-username" type="text" placeholder="choose a username" autocomplete="username" required />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="reg-password" type="password" placeholder="min 6 characters" autocomplete="new-password" required />
+      </div>
+      <div class="form-group">
+        <label>Instructor Code <span style="color:var(--muted);font-weight:400">(leave blank if student)</span></label>
+        <input id="reg-code" type="text" placeholder="optional" />
+        <div class="hint">Only instructors need this code.</div>
+      </div>
+      <button class="btn-primary" type="submit">Create Account</button>
+      <div class="error-msg" id="register-error"></div>
+    </form>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+  // Redirect if already logged in
+  if (localStorage.getItem('token')) window.location.href = '/articles';
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab + '-form').style.display = 'block';
+    });
+  });
+
+  // Login
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    const err = document.getElementById('login-error');
+    err.textContent = '';
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    try {
+      const res = await API.post('/api/login', {
+        username: document.getElementById('login-username').value.trim(),
+        password: document.getElementById('login-password').value,
+      });
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      window.location.href = '/articles';
+    } catch (ex) {
+      err.textContent = ex.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sign In';
+    }
+  });
+
+  // Register
+  document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    const err = document.getElementById('register-error');
+    err.textContent = '';
+    const pw = document.getElementById('reg-password').value;
+    if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+    btn.disabled = true; btn.textContent = 'Creating account…';
+    try {
+      const res = await API.post('/api/register', {
+        username: document.getElementById('reg-username').value.trim(),
+        display_name: document.getElementById('reg-name').value.trim(),
+        password: pw,
+        instructor_code: document.getElementById('reg-code').value.trim() || null,
+      });
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      window.location.href = '/articles';
+    } catch (ex) {
+      err.textContent = ex.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Account';
+    }
+  });
+</script>
+</body>
+</html>
