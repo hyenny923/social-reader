@@ -56,11 +56,27 @@
       <div class="loading-wrap"><div class="spinner"></div></div>
     </div>
     <div class="reader-sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <h3>Annotations</h3>
-        <span class="sidebar-count" id="sidebar-count">0</span>
+      <!-- Annotation list view -->
+      <div id="sidebar-ann-view" style="display:flex;flex-direction:column;height:100%">
+        <div class="sidebar-header">
+          <h3>Annotations</h3>
+          <span class="sidebar-count" id="sidebar-count">0</span>
+        </div>
+        <div class="sidebar-list" id="sidebar-list"></div>
       </div>
-      <div class="sidebar-list" id="sidebar-list"></div>
+      <!-- Comment panel view -->
+      <div id="sidebar-comment-view" style="display:none;flex-direction:column;height:100%">
+        <div class="sidebar-header">
+          <button id="comment-back-btn" style="background:none;color:var(--muted);font-size:13px;padding:0;margin-right:8px">← 목록</button>
+          <h3 style="flex:1">💬 댓글</h3>
+        </div>
+        <div id="comment-ann-preview" style="padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)"></div>
+        <div id="comment-list" class="comment-list"></div>
+        <div class="comment-input-row">
+          <textarea id="comment-input" placeholder="댓글 입력…" rows="2"></textarea>
+          <button id="comment-submit">전송</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

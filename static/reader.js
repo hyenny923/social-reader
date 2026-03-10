@@ -8,12 +8,13 @@ const articleId = parseInt(window.location.pathname.split('/').pop(), 10);
 const currentUser = getUser();
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let pdfDoc       = null;
-let annotations  = [];          // all loaded annotations
-let currentTool  = 'select';
-let currentColor = '#FFD700';
-let pendingNote  = null;        // { pageNum, x, y } waiting for modal input
-let ws           = null;
+let pdfDoc          = null;
+let annotations     = [];
+let currentTool     = 'select';
+let currentColor    = '#FFD700';
+let pendingNote     = null;
+let ws              = null;
+let activeCommentAnn = null;    // annotation currently showing in comment panel
 
 // ── Tool selection ─────────────────────────────────────────────────────────────
 const TOOLS = ['select', 'highlight', 'underline', 'note', 'erase'];
@@ -331,6 +332,13 @@ function renderAnnotationsForPage(pageNum) {
       await deleteAnnotation(ann.id);
     });
 
+    // click in select mode → open comment panel
+    g.addEventListener('click', (e) => {
+      if (currentTool !== 'select') return;
+      e.stopPropagation();
+      openCommentPanel(ann);
+    });
+
     // hover tooltip
     g.addEventListener('mouseenter', (e) => showAnnotationTooltip(e, ann));
     g.addEventListener('mouseleave', hideAnnotationTooltip);
@@ -385,6 +393,94 @@ function hideAnnotationTooltip() {
 }
 
 document.addEventListener('mousemove', e => { if (tooltip) positionTooltip(e); });
+
+// ── Comment Panel ─────────────────────────────────────────────────────────────
+async function openCommentPanel(ann) {
+  activeCommentAnn = ann;
+  // Show comment view, hide annotation list
+  document.getElementById('sidebar-ann-view').style.display = 'none';
+  document.getElementById('sidebar-comment-view').style.display = 'flex';
+  document.getElementById('sidebar').classList.remove('collapsed');
+
+  // Preview of the annotation
+  const preview = ann.type === 'note'
+    ? ann.data.text
+    : (ann.data.selectedText ? `"${ann.data.selectedText.slice(0,80)}"` : '');
+  document.getElementById('comment-ann-preview').innerHTML =
+    `<span style="color:${userColor(ann.user_id)};font-weight:600">${escHtml(ann.display_name)}</span>'s
+     <span class="ann-type-badge ${ann.type}" style="font-size:10px">${ann.type}</span>
+     ${preview ? `<br><span style="color:var(--text)">${escHtml(preview)}</span>` : ''}`;
+
+  await loadComments(ann.id);
+}
+
+async function loadComments(annotationId) {
+  const listEl = document.getElementById('comment-list');
+  listEl.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">로딩 중…</div>';
+  try {
+    const comments = await API.get(`/api/comments/${annotationId}`);
+    renderComments(comments);
+  } catch { listEl.innerHTML = ''; }
+}
+
+function renderComments(comments) {
+  const listEl = document.getElementById('comment-list');
+  if (!comments.length) {
+    listEl.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px;text-align:center">아직 댓글이 없어요.<br>첫 댓글을 남겨보세요!</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  comments.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    item.dataset.id = c.id;
+    const isOwn = c.user_id === currentUser.id;
+    item.innerHTML = `
+      <div class="comment-author" style="color:${userColor(c.user_id)};display:flex;justify-content:space-between">
+        <span>${escHtml(c.display_name)}</span>
+        ${isOwn || currentUser.role === 'instructor' ? `<button class="comment-del-btn" data-id="${c.id}" style="background:none;color:var(--muted);font-size:11px">✕</button>` : ''}
+      </div>
+      <div class="comment-text">${escHtml(c.text)}</div>
+      <div class="comment-time">${fmtTime(c.created_at)}</div>`;
+    listEl.appendChild(item);
+  });
+  listEl.querySelectorAll('.comment-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await API.del(`/api/comments/${btn.dataset.id}`);
+      if (activeCommentAnn) loadComments(activeCommentAnn.id);
+    });
+  });
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
+document.getElementById('comment-back-btn').addEventListener('click', () => {
+  activeCommentAnn = null;
+  document.getElementById('sidebar-ann-view').style.display = 'flex';
+  document.getElementById('sidebar-comment-view').style.display = 'none';
+});
+
+document.getElementById('comment-submit').addEventListener('click', async () => {
+  const text = document.getElementById('comment-input').value.trim();
+  if (!text || !activeCommentAnn) return;
+  document.getElementById('comment-input').value = '';
+  try {
+    await API.post('/api/comments', { annotation_id: activeCommentAnn.id, text });
+    await loadComments(activeCommentAnn.id);
+  } catch (err) { showToast('댓글 저장 실패: ' + err.message); }
+});
+
+document.getElementById('comment-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('comment-submit').click();
+  }
+});
+
+function fmtTime(s) {
+  return new Date(s + (s.includes('Z') ? '' : 'Z')).toLocaleString('ko-KR', {
+    month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'
+  });
+}
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 function renderSidebar() {
@@ -501,6 +597,15 @@ function connectWebSocket() {
         renderAnnotationsForPage(ann.page);
         renderSidebar();
         showToast(`${ann.display_name} added a ${ann.type}`);
+      }
+    }
+
+    if (msg.event === 'comment_added') {
+      // If comment panel is open for this annotation, refresh
+      if (activeCommentAnn && activeCommentAnn.id === msg.comment.annotation_id) {
+        loadComments(activeCommentAnn.id);
+      } else {
+        showToast(`${msg.comment.display_name}이 댓글을 남겼어요`);
       }
     }
 

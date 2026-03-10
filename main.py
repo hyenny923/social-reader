@@ -2,6 +2,8 @@ import os
 import uuid
 import json
 import shutil
+import random
+import string
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -28,6 +30,9 @@ UPLOAD_DIR = Path("uploads")
 DB_PATH = os.getenv("DB_PATH", "social_reader.db")
 
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+def generate_join_code() -> str:
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -99,6 +104,38 @@ async def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS classes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                join_code TEXT UNIQUE NOT NULL,
+                instructor_id INTEGER REFERENCES users(id),
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS class_members (
+                class_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                joined_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (class_id, user_id)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS annotation_comments (
+                id TEXT PRIMARY KEY,
+                annotation_id TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        # Migration: add class_id to articles
+        try:
+            await db.execute("ALTER TABLE articles ADD COLUMN class_id INTEGER")
+        except Exception:
+            pass
         await db.commit()
 
 
@@ -174,6 +211,17 @@ class AnnotationCreate(BaseModel):
     type: str  # highlight | underline | note
     page: int
     data: dict
+
+class CreateClassRequest(BaseModel):
+    name: str
+    description: Optional[str] = ''
+
+class JoinClassRequest(BaseModel):
+    join_code: str
+
+class CreateCommentRequest(BaseModel):
+    annotation_id: str
+    text: str
 
 
 # ─── Auth Routes ──────────────────────────────────────────────────────────────
@@ -385,6 +433,237 @@ async def delete_annotation(ann_id: str, request: Request):
         await db.commit()
 
     await manager.broadcast({"event": "annotation_deleted", "annotation_id": ann_id}, article_id)
+    return {"ok": True}
+
+
+# ─── Class Routes ────────────────────────────────────────────────────────────
+
+@app.get("/api/classes")
+async def list_classes(request: Request):
+    user = await get_current_user(request)
+    user_id = int(user["sub"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if user["role"] == "instructor":
+            cursor = await db.execute(
+                "SELECT * FROM classes WHERE instructor_id = ? ORDER BY created_at DESC", (user_id,)
+            )
+        else:
+            cursor = await db.execute("""
+                SELECT c.* FROM classes c
+                JOIN class_members cm ON c.id = cm.class_id
+                WHERE cm.user_id = ? ORDER BY c.created_at DESC
+            """, (user_id,))
+        rows = await cursor.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            # member count
+            cur2 = await db.execute("SELECT COUNT(*) as cnt FROM class_members WHERE class_id = ?", (d["id"],))
+            cnt = await cur2.fetchone()
+            d["member_count"] = cnt["cnt"] if cnt else 0
+            result.append(d)
+        return result
+
+
+@app.post("/api/classes")
+async def create_class(req: CreateClassRequest, request: Request):
+    user = await require_instructor(request)
+    user_id = int(user["sub"])
+    join_code = generate_join_code()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "INSERT INTO classes (name, description, join_code, instructor_id) VALUES (?, ?, ?, ?)",
+            (req.name.strip(), (req.description or '').strip(), join_code, user_id),
+        )
+        await db.commit()
+        cursor = await db.execute("SELECT * FROM classes WHERE id = ?", (cur.lastrowid,))
+        row = await cursor.fetchone()
+        d = dict(row)
+        d["member_count"] = 0
+        return d
+
+
+@app.delete("/api/classes/{class_id}")
+async def delete_class(class_id: int, request: Request):
+    user = await require_instructor(request)
+    user_id = int(user["sub"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id FROM classes WHERE id = ? AND instructor_id = ?", (class_id, user_id)
+        )
+        if not await cursor.fetchone():
+            raise HTTPException(404, "Class not found")
+        await db.execute("DELETE FROM class_members WHERE class_id = ?", (class_id,))
+        await db.execute("DELETE FROM classes WHERE id = ?", (class_id,))
+        await db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/classes/join")
+async def join_class(req: JoinClassRequest, request: Request):
+    user = await get_current_user(request)
+    user_id = int(user["sub"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM classes WHERE join_code = ?", (req.join_code.strip().upper(),)
+        )
+        cls = await cursor.fetchone()
+        if not cls:
+            raise HTTPException(404, "잘못된 참여 코드입니다")
+        try:
+            await db.execute(
+                "INSERT INTO class_members (class_id, user_id) VALUES (?, ?)", (cls["id"], user_id)
+            )
+            await db.commit()
+        except aiosqlite.IntegrityError:
+            pass  # already member
+        return dict(cls)
+
+
+@app.get("/api/classes/{class_id}/members")
+async def get_class_members(class_id: int, request: Request):
+    user = await require_instructor(request)
+    user_id = int(user["sub"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id FROM classes WHERE id = ? AND instructor_id = ?", (class_id, user_id)
+        )
+        if not await cursor.fetchone():
+            raise HTTPException(403, "Not your class")
+        cursor = await db.execute("""
+            SELECT u.id, u.display_name, u.username,
+                   COUNT(a.id) as annotation_count,
+                   SUM(CASE WHEN a.type='highlight' THEN 1 ELSE 0 END) as highlight_count,
+                   SUM(CASE WHEN a.type='underline' THEN 1 ELSE 0 END) as underline_count,
+                   SUM(CASE WHEN a.type='note'      THEN 1 ELSE 0 END) as note_count
+            FROM class_members cm
+            JOIN users u ON cm.user_id = u.id
+            LEFT JOIN annotations a ON a.user_id = u.id
+            WHERE cm.class_id = ?
+            GROUP BY u.id ORDER BY u.display_name
+        """, (class_id,))
+        rows = await cursor.fetchall()
+        students = []
+        for r in rows:
+            d = dict(r)
+            cur2 = await db.execute("""
+                SELECT a.id, a.type, a.page, a.data, a.created_at,
+                       ar.title as article_title, ar.id as article_id
+                FROM annotations a JOIN articles ar ON a.article_id = ar.id
+                WHERE a.user_id = ? ORDER BY ar.title, a.page, a.created_at
+            """, (d["id"],))
+            anns = await cur2.fetchall()
+            ann_list = []
+            for an in anns:
+                ad = dict(an)
+                ad["data"] = json.loads(ad["data"])
+                ann_list.append(ad)
+            d["annotations"] = ann_list
+            students.append(d)
+        return students
+
+
+# ─── My Annotations ───────────────────────────────────────────────────────────
+
+@app.get("/api/my-annotations")
+async def get_my_annotations(request: Request, article_id: Optional[int] = None):
+    user = await get_current_user(request)
+    user_id = int(user["sub"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if article_id:
+            cursor = await db.execute("""
+                SELECT a.id, a.type, a.page, a.data, a.created_at,
+                       ar.title as article_title, ar.id as article_id
+                FROM annotations a JOIN articles ar ON a.article_id = ar.id
+                WHERE a.user_id = ? AND a.article_id = ?
+                ORDER BY a.page ASC, a.created_at ASC
+            """, (user_id, article_id))
+        else:
+            cursor = await db.execute("""
+                SELECT a.id, a.type, a.page, a.data, a.created_at,
+                       ar.title as article_title, ar.id as article_id
+                FROM annotations a JOIN articles ar ON a.article_id = ar.id
+                WHERE a.user_id = ?
+                ORDER BY ar.title ASC, a.page ASC, a.created_at ASC
+            """, (user_id,))
+        rows = await cursor.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["data"] = json.loads(d["data"])
+            result.append(d)
+        return result
+
+
+# ─── Comment Routes ───────────────────────────────────────────────────────────
+
+@app.get("/api/comments/{annotation_id}")
+async def get_comments(annotation_id: str, request: Request):
+    await get_current_user(request)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("""
+            SELECT c.id, c.annotation_id, c.text, c.created_at,
+                   u.display_name, u.username, u.id as user_id
+            FROM annotation_comments c JOIN users u ON c.user_id = u.id
+            WHERE c.annotation_id = ? ORDER BY c.created_at ASC
+        """, (annotation_id,))
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/comments")
+async def create_comment(req: CreateCommentRequest, request: Request):
+    user = await get_current_user(request)
+    user_id = int(user["sub"])
+    comment_id = str(uuid.uuid4())
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT article_id FROM annotations WHERE id = ?", (req.annotation_id,)
+        )
+        ann = await cursor.fetchone()
+        if not ann:
+            raise HTTPException(404, "Annotation not found")
+        await db.execute(
+            "INSERT INTO annotation_comments (id, annotation_id, user_id, text) VALUES (?, ?, ?, ?)",
+            (comment_id, req.annotation_id, user_id, req.text.strip()),
+        )
+        await db.commit()
+        cursor = await db.execute("""
+            SELECT c.id, c.annotation_id, c.text, c.created_at,
+                   u.display_name, u.username, u.id as user_id
+            FROM annotation_comments c JOIN users u ON c.user_id = u.id
+            WHERE c.id = ?
+        """, (comment_id,))
+        result = dict(await cursor.fetchone())
+    await manager.broadcast(
+        {"event": "comment_added", "comment": result}, ann["article_id"]
+    )
+    return result
+
+
+@app.delete("/api/comments/{comment_id}")
+async def delete_comment(comment_id: str, request: Request):
+    user = await get_current_user(request)
+    user_id = int(user["sub"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT user_id FROM annotation_comments WHERE id = ?", (comment_id,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(404, "Comment not found")
+        if row["user_id"] != user_id and user["role"] != "instructor":
+            raise HTTPException(403, "Not allowed")
+        await db.execute("DELETE FROM annotation_comments WHERE id = ?", (comment_id,))
+        await db.commit()
     return {"ok": True}
 
 
