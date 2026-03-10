@@ -115,7 +115,6 @@ async function loadClasses() {
       card.className = 'class-card';
       card.innerHTML = `
         <div class="class-card-top">
-          <div class="class-card-icon">${cls.name.charAt(0)}</div>
           <div style="flex:1;min-width:0">
             <h3 class="class-card-name">${escHtml(cls.name)}</h3>
             ${cls.description ? `<p class="class-card-desc">${escHtml(cls.description)}</p>` : ''}
