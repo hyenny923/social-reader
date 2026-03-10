@@ -203,6 +203,17 @@ async function renderPage(pageNum) {
 
   // attach event listeners
   setupPageEvents(wrapper, svg, pageNum);
+
+  // page_view logging: fire once when page enters viewport
+  const pageObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        logEvent('page_view', { article_id: articleId, page: pageNum });
+        pageObserver.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  pageObserver.observe(wrapper);
 }
 
 // ── Page events ────────────────────────────────────────────────────────────────
@@ -480,6 +491,10 @@ document.getElementById('comment-submit').addEventListener('click', async () => 
   try {
     await API.post('/api/comments', { annotation_id: activeCommentAnn.id, text });
     await loadComments(activeCommentAnn.id);
+    logEvent('comment_create', {
+      article_id: articleId, page: activeCommentAnn.page,
+      metadata: { annotation_type: activeCommentAnn.type },
+    });
   } catch (err) { showToast('댓글 저장 실패: ' + err.message); }
 });
 
@@ -576,6 +591,10 @@ async function saveAnnotation(type, page, data) {
     annotations.push(ann);
     renderAnnotationsForPage(page);
     renderSidebar();
+    logEvent('annotation_create', {
+      article_id: articleId, page,
+      metadata: { type, selected_text: data.selectedText || null },
+    });
   } catch (err) {
     showToast('Failed to save annotation: ' + err.message);
   }
@@ -583,10 +602,16 @@ async function saveAnnotation(type, page, data) {
 
 async function deleteAnnotation(annId) {
   try {
-    await API.del(`/api/annotations/${annId}`);
     const ann = annotations.find(a => a.id === annId);
+    await API.del(`/api/annotations/${annId}`);
     annotations = annotations.filter(a => a.id !== annId);
-    if (ann) renderAnnotationsForPage(ann.page);
+    if (ann) {
+      renderAnnotationsForPage(ann.page);
+      logEvent('annotation_delete', {
+        article_id: articleId, page: ann.page,
+        metadata: { type: ann.type },
+      });
+    }
     renderSidebar();
     showToast('Annotation deleted.');
   } catch (err) {
@@ -644,12 +669,18 @@ function connectWebSocket() {
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
   // Load article title
+  let articleTitle = null;
   try {
     const articles = await API.get('/api/articles');
     const article  = articles.find(a => a.id === articleId);
-    if (article) document.getElementById('article-title').textContent = article.title;
+    if (article) {
+      articleTitle = article.title;
+      document.getElementById('article-title').textContent = article.title;
+    }
     document.title = `${article?.title || 'Article'} — Social Reader`;
   } catch (_) {}
+
+  logEvent('article_open', { article_id: articleId, article_title: articleTitle });
 
   await loadPDF();
   await loadAnnotations();

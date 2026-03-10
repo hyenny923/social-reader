@@ -85,6 +85,17 @@ function showToast(msg, duration = 2500) {
   t._timer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
+// ── Event logging (fire-and-forget to NeonDB) ─────────────────────────────────
+function logEvent(eventType, data = {}) {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ event_type: eventType, ...data }),
+  }).catch(() => {});
+}
+
 // User color palette (consistent per user_id)
 const USER_COLORS = [
   '#E53E3E','#D97706','#059669','#2563EB',

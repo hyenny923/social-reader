@@ -12,6 +12,7 @@ from typing import Optional, Dict, Set
 import bcrypt
 import jwt
 import aiosqlite
+import asyncpg
 from fastapi import (
     FastAPI, HTTPException, UploadFile, File,
     WebSocket, WebSocketDisconnect, Form, Request
@@ -28,6 +29,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")
 INSTRUCTOR_CODE = os.getenv("INSTRUCTOR_CODE", "instructor2024")
 UPLOAD_DIR = Path("uploads")
 DB_PATH = os.getenv("DB_PATH", "social_reader.db")
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
+
+neon_pool: Optional[asyncpg.Pool] = None
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -139,10 +143,41 @@ async def init_db():
         await db.commit()
 
 
+async def init_neon():
+    global neon_pool
+    if not NEON_DATABASE_URL:
+        return
+    try:
+        neon_pool = await asyncpg.create_pool(NEON_DATABASE_URL, min_size=1, max_size=5)
+        async with neon_pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS web_logs (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    username TEXT,
+                    display_name TEXT,
+                    event_type TEXT NOT NULL,
+                    article_id INTEGER,
+                    article_title TEXT,
+                    class_id INTEGER,
+                    page INTEGER,
+                    metadata JSONB,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+        print("NeonDB connected ✓")
+    except Exception as e:
+        print(f"NeonDB connection failed (logging disabled): {e}")
+        neon_pool = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await init_neon()
     yield
+    if neon_pool:
+        await neon_pool.close()
 
 
 app = FastAPI(title="Social Reader", lifespan=lifespan)
@@ -222,6 +257,14 @@ class JoinClassRequest(BaseModel):
 class CreateCommentRequest(BaseModel):
     annotation_id: str
     text: str
+
+class LogEventRequest(BaseModel):
+    event_type: str
+    article_id: Optional[int] = None
+    article_title: Optional[str] = None
+    class_id: Optional[int] = None
+    page: Optional[int] = None
+    metadata: Optional[dict] = None
 
 
 # ─── Auth Routes ──────────────────────────────────────────────────────────────
@@ -691,6 +734,31 @@ async def delete_comment(comment_id: str, request: Request):
             raise HTTPException(403, "Not allowed")
         await db.execute("DELETE FROM annotation_comments WHERE id = ?", (comment_id,))
         await db.commit()
+    return {"ok": True}
+
+
+# ─── Event Logging ────────────────────────────────────────────────────────────
+
+@app.post("/api/log")
+async def log_event(req: LogEventRequest, request: Request):
+    user = await get_current_user(request)
+    if not neon_pool:
+        return {"ok": True}
+    try:
+        async with neon_pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO web_logs
+                    (user_id, username, display_name, event_type,
+                     article_id, article_title, class_id, page, metadata)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            """,
+                int(user["sub"]), user["username"], user["display_name"],
+                req.event_type, req.article_id, req.article_title,
+                req.class_id, req.page,
+                json.dumps(req.metadata) if req.metadata else None,
+            )
+    except Exception as e:
+        print(f"Log write failed: {e}")
     return {"ok": True}
 
 
