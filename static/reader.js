@@ -8,13 +8,14 @@ const articleId = parseInt(window.location.pathname.split('/').pop(), 10);
 const currentUser = getUser();
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let pdfDoc          = null;
-let annotations     = [];
-let currentTool     = 'select';
-let currentColor    = '#FFD700';
-let pendingNote     = null;
-let ws              = null;
-let activeCommentAnn = null;    // annotation currently showing in comment panel
+let pdfDoc           = null;
+let annotations      = [];
+let currentTool      = 'select';
+let currentColor     = '#FFD700';
+let pendingNote      = null;
+let ws               = null;
+let activeCommentAnn = null;
+const recentlySavedIds = new Set(); // 내가 방금 저장한 ID → WS 중복 방지
 
 // ── Tool selection ─────────────────────────────────────────────────────────────
 const TOOLS = ['select', 'highlight', 'underline', 'note', 'erase'];
@@ -570,6 +571,8 @@ async function loadAnnotations() {
 async function saveAnnotation(type, page, data) {
   try {
     const ann = await API.post('/api/annotations', { article_id: articleId, type, page, data });
+    recentlySavedIds.add(ann.id);                  // WS 중복 방지 등록
+    setTimeout(() => recentlySavedIds.delete(ann.id), 5000); // 5초 후 해제
     annotations.push(ann);
     renderAnnotationsForPage(page);
     renderSidebar();
@@ -604,13 +607,12 @@ function connectWebSocket() {
 
     if (msg.event === 'annotation_added') {
       const ann = msg.annotation;
-      // Ignore if it's our own (already added optimistically)
-      if (!annotations.find(a => a.id === ann.id)) {
-        annotations.push(ann);
-        renderAnnotationsForPage(ann.page);
-        renderSidebar();
-        showToast(`${ann.display_name} added a ${ann.type}`);
-      }
+      if (recentlySavedIds.has(ann.id)) return;     // 내가 방금 저장한 것 → 스킵
+      if (annotations.find(a => a.id === ann.id)) return; // 이미 있음 → 스킵
+      annotations.push(ann);
+      renderAnnotationsForPage(ann.page);
+      renderSidebar();
+      showToast(`${ann.display_name}이 ${ann.type}을 추가했어요`);
     }
 
     if (msg.event === 'comment_added') {
