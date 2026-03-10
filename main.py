@@ -300,7 +300,12 @@ async def list_articles(request: Request, class_id: Optional[int] = None):
 
 
 @app.post("/api/articles")
-async def upload_article(request: Request, title: str = Form(...), file: UploadFile = File(...)):
+async def upload_article(
+    request: Request,
+    title: str = Form(...),
+    file: UploadFile = File(...),
+    class_id: Optional[int] = Form(None),
+):
     user = await require_instructor(request)
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are allowed")
@@ -312,13 +317,13 @@ async def upload_article(request: Request, title: str = Form(...), file: UploadF
 
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
-            "INSERT INTO articles (title, filename, uploaded_by) VALUES (?, ?, ?)",
-            (title.strip(), filename, int(user["sub"])),
+            "INSERT INTO articles (title, filename, uploaded_by, class_id) VALUES (?, ?, ?, ?)",
+            (title.strip(), filename, int(user["sub"]), class_id),
         )
         await db.commit()
         article_id = cur.lastrowid
 
-    return {"id": article_id, "title": title.strip(), "filename": filename}
+    return {"id": article_id, "title": title.strip(), "filename": filename, "class_id": class_id}
 
 
 @app.patch("/api/articles/{article_id}")
