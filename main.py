@@ -265,6 +265,23 @@ async def upload_article(request: Request, title: str = Form(...), file: UploadF
     return {"id": article_id, "title": title.strip(), "filename": filename}
 
 
+@app.patch("/api/articles/{article_id}")
+async def update_article_title(article_id: int, request: Request):
+    await require_instructor(request)
+    body = await request.json()
+    new_title = body.get("title", "").strip()
+    if not new_title:
+        raise HTTPException(400, "Title cannot be empty")
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT id FROM articles WHERE id = ?", (article_id,))
+        if not await cursor.fetchone():
+            raise HTTPException(404, "Article not found")
+        await db.execute("UPDATE articles SET title = ? WHERE id = ?", (new_title, article_id))
+        await db.commit()
+    return {"id": article_id, "title": new_title}
+
+
 @app.delete("/api/articles/{article_id}")
 async def delete_article(article_id: int, request: Request):
     await require_instructor(request)

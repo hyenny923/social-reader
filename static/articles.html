@@ -108,8 +108,13 @@
         const card = document.createElement('div');
         card.className = 'article-card';
         card.innerHTML = `
-          <div class="article-info">
-            <h4>${escHtml(a.title)}</h4>
+          <div class="article-info" style="flex:1">
+            <div class="title-row" data-id="${a.id}">
+              <h4 class="title-text">${escHtml(a.title)}</h4>
+              ${user.role === 'instructor' ? `
+                <button class="btn-edit-title" data-id="${a.id}" data-title="${escHtml(a.title)}" title="제목 수정">✏️</button>
+              ` : ''}
+            </div>
             <div class="article-meta">Uploaded by ${escHtml(a.uploaded_by_name)} · ${fmtDate(a.created_at)}</div>
           </div>
           <div class="article-actions">
@@ -122,6 +127,53 @@
       grid.querySelectorAll('.btn-read').forEach(btn => {
         btn.addEventListener('click', () => window.location.href = `/reader/${btn.dataset.id}`);
       });
+
+      grid.querySelectorAll('.btn-edit-title').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const titleRow = btn.closest('.title-row');
+          const titleEl  = titleRow.querySelector('.title-text');
+          const oldTitle = btn.dataset.title;
+          const id       = btn.dataset.id;
+
+          // 인라인 편집 UI로 교체
+          titleRow.innerHTML = `
+            <input class="inline-title-input" value="${escHtml(oldTitle)}" style="
+              flex:1; font-size:15px; font-weight:600; padding:4px 8px;
+              border:2px solid var(--primary); border-radius:6px; outline:none;
+            " />
+            <button class="btn-save-title" style="background:var(--primary);color:#fff;padding:4px 12px;border-radius:6px;font-size:13px;margin-left:6px;">저장</button>
+            <button class="btn-cancel-title" style="background:var(--bg);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:13px;margin-left:4px;">취소</button>
+          `;
+          const input = titleRow.querySelector('.inline-title-input');
+          input.focus();
+          input.select();
+
+          async function saveTitle() {
+            const newTitle = input.value.trim();
+            if (!newTitle) return;
+            try {
+              await fetch(`/api/articles/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ title: newTitle })
+              });
+              showToast('제목이 수정됐어요!');
+              loadArticles();
+            } catch (ex) {
+              showToast('수정 실패: ' + ex.message);
+            }
+          }
+
+          titleRow.querySelector('.btn-save-title').addEventListener('click', saveTitle);
+          titleRow.querySelector('.btn-cancel-title').addEventListener('click', loadArticles);
+          input.addEventListener('keydown', e => {
+            if (e.key === 'Enter')  saveTitle();
+            if (e.key === 'Escape') loadArticles();
+          });
+        });
+      });
+
       grid.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
