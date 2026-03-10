@@ -146,9 +146,13 @@ async def init_db():
 async def init_neon():
     global neon_pool
     if not NEON_DATABASE_URL:
+        print("NEON_DATABASE_URL not set, logging disabled")
         return
     try:
-        neon_pool = await asyncpg.create_pool(NEON_DATABASE_URL, min_size=1, max_size=5)
+        # Strip sslmode from URL and pass ssl='require' explicitly for asyncpg compatibility
+        import re
+        clean_url = re.sub(r'[?&]sslmode=\w+', '', NEON_DATABASE_URL)
+        neon_pool = await asyncpg.create_pool(clean_url, min_size=1, max_size=5, ssl='require')
         async with neon_pool.acquire() as conn:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS web_logs (
@@ -168,7 +172,9 @@ async def init_neon():
             """)
         print("NeonDB connected ✓")
     except Exception as e:
+        import traceback
         print(f"NeonDB connection failed (logging disabled): {e}")
+        traceback.print_exc()
         neon_pool = None
 
 
