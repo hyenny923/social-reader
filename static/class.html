@@ -140,7 +140,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel-content').forEach(p => p.style.display = 'none');
   document.getElementById(`tab-${name}`).style.display = 'block';
   if (name === 'articles')       loadArticles();
-  if (name === 'my-annotations') loadMyAnnotations();
+  if (name === 'my-annotations') { loadMyAnnotations(); logEvent('annotation_list_view', { class_id: classId }); }
   if (name === 'students')       loadStudents();
 }
 document.querySelectorAll('.main-tab').forEach(btn =>

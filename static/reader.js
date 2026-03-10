@@ -619,6 +619,34 @@ async function deleteAnnotation(annId) {
   }
 }
 
+// ── Scroll logging (5초 throttle) ─────────────────────────────────────────────
+let _scrollTimer = null;
+document.addEventListener('scroll', () => {
+  if (_scrollTimer) return;
+  _scrollTimer = setTimeout(() => {
+    _scrollTimer = null;
+    const viewer = document.getElementById('pdf-viewer');
+    if (!viewer) return;
+    const viewerRect = viewer.getBoundingClientRect();
+    const scrollTop  = window.scrollY;
+    const totalH     = viewer.scrollHeight || 1;
+    const scrollPct  = Math.round((scrollTop / (totalH - window.innerHeight || 1)) * 100);
+
+    // 현재 화면에 가장 많이 보이는 페이지 찾기
+    let visiblePage = null;
+    document.querySelectorAll('.page-wrapper').forEach(w => {
+      const r = w.getBoundingClientRect();
+      if (r.top < window.innerHeight && r.bottom > 0) visiblePage = parseInt(w.dataset.page);
+    });
+
+    logEvent('scroll', {
+      article_id: articleId,
+      page: visiblePage,
+      metadata: { scroll_pct: scrollPct },
+    });
+  }, 5000);
+}, { passive: true });
+
 // ── WebSocket (real-time) ──────────────────────────────────────────────────────
 function connectWebSocket() {
   const token  = localStorage.getItem('token');

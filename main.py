@@ -153,6 +153,7 @@ async def init_neon():
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS web_logs (
                     id SERIAL PRIMARY KEY,
+                    session_id TEXT,
                     user_id INTEGER,
                     username TEXT,
                     display_name TEXT,
@@ -260,6 +261,7 @@ class CreateCommentRequest(BaseModel):
 
 class LogEventRequest(BaseModel):
     event_type: str
+    session_id: Optional[str] = None
     article_id: Optional[int] = None
     article_title: Optional[str] = None
     class_id: Optional[int] = None
@@ -748,11 +750,11 @@ async def log_event(req: LogEventRequest, request: Request):
         async with neon_pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO web_logs
-                    (user_id, username, display_name, event_type,
+                    (session_id, user_id, username, display_name, event_type,
                      article_id, article_title, class_id, page, metadata)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
             """,
-                int(user["sub"]), user["username"], user["display_name"],
+                req.session_id, int(user["sub"]), user["username"], user["display_name"],
                 req.event_type, req.article_id, req.article_title,
                 req.class_id, req.page,
                 json.dumps(req.metadata) if req.metadata else None,

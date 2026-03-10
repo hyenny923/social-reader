@@ -85,6 +85,12 @@ function showToast(msg, duration = 2500) {
   t._timer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
+// ── Session ID (재접속/새 탭마다 갱신) ────────────────────────────────────────
+if (!sessionStorage.getItem('session_id')) {
+  sessionStorage.setItem('session_id', crypto.randomUUID());
+}
+function getSessionId() { return sessionStorage.getItem('session_id'); }
+
 // ── Event logging (fire-and-forget to NeonDB) ─────────────────────────────────
 function logEvent(eventType, data = {}) {
   const token = localStorage.getItem('token');
@@ -92,7 +98,7 @@ function logEvent(eventType, data = {}) {
   fetch('/api/log', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ event_type: eventType, ...data }),
+    body: JSON.stringify({ event_type: eventType, session_id: getSessionId(), ...data }),
   }).catch(() => {});
 }
 
