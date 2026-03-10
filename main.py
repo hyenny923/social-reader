@@ -278,15 +278,23 @@ async def me(request: Request):
 # ─── Article Routes ───────────────────────────────────────────────────────────
 
 @app.get("/api/articles")
-async def list_articles(request: Request):
+async def list_articles(request: Request, class_id: Optional[int] = None):
     await get_current_user(request)
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("""
-            SELECT a.id, a.title, a.created_at, u.display_name AS uploaded_by_name
-            FROM articles a JOIN users u ON a.uploaded_by = u.id
-            ORDER BY a.created_at DESC
-        """)
+        if class_id is not None:
+            cursor = await db.execute("""
+                SELECT a.id, a.title, a.created_at, u.display_name AS uploaded_by_name
+                FROM articles a JOIN users u ON a.uploaded_by = u.id
+                WHERE a.class_id = ?
+                ORDER BY a.created_at DESC
+            """, (class_id,))
+        else:
+            cursor = await db.execute("""
+                SELECT a.id, a.title, a.created_at, u.display_name AS uploaded_by_name
+                FROM articles a JOIN users u ON a.uploaded_by = u.id
+                ORDER BY a.created_at DESC
+            """)
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
@@ -438,6 +446,18 @@ async def delete_annotation(ann_id: str, request: Request):
 
 # ─── Class Routes ────────────────────────────────────────────────────────────
 
+@app.get("/api/classes/{class_id}/info")
+async def get_class_info(class_id: int, request: Request):
+    await get_current_user(request)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM classes WHERE id = ?", (class_id,))
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(404, "Class not found")
+        return dict(row)
+
+
 @app.get("/api/classes")
 async def list_classes(request: Request):
     user = await get_current_user(request)
@@ -458,10 +478,12 @@ async def list_classes(request: Request):
         result = []
         for r in rows:
             d = dict(r)
-            # member count
             cur2 = await db.execute("SELECT COUNT(*) as cnt FROM class_members WHERE class_id = ?", (d["id"],))
             cnt = await cur2.fetchone()
             d["member_count"] = cnt["cnt"] if cnt else 0
+            cur3 = await db.execute("SELECT COUNT(*) as cnt FROM articles WHERE class_id = ?", (d["id"],))
+            cnt3 = await cur3.fetchone()
+            d["article_count"] = cnt3["cnt"] if cnt3 else 0
             result.append(d)
         return result
 
@@ -698,6 +720,11 @@ async def root():
 @app.get("/articles")
 async def articles_page():
     return FileResponse("static/articles.html")
+
+
+@app.get("/class/{class_id}")
+async def class_page(class_id: int):
+    return FileResponse("static/class.html")
 
 
 @app.get("/reader/{article_id}")

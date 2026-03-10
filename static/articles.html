@@ -20,102 +20,16 @@
 </header>
 
 <main class="page-body">
-  <!-- Tab bar -->
-  <div class="main-tabs">
-    <button class="main-tab active" data-tab="articles">📄 Articles</button>
-    <button class="main-tab" data-tab="my-annotations" id="tab-my-annotations">🖊 My Annotations</button>
-    <button class="main-tab" data-tab="students" id="tab-students" style="display:none">👥 Students</button>
-    <button class="main-tab" data-tab="classes">🏫 Classes</button>
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 class="page-title" id="page-greeting">My Classes</h2>
+      <p class="page-sub" id="page-sub"></p>
+    </div>
+    <button id="action-btn" class="btn-upload" style="display:none"></button>
   </div>
 
-  <!-- ── ARTICLES TAB ─────────────────────────────────────────────── -->
-  <div id="tab-articles" class="tab-panel-content">
-    <div class="upload-panel" id="upload-panel" style="display:none">
-      <h3>Upload New Article</h3>
-      <form id="upload-form">
-        <div class="upload-row">
-          <div class="form-group">
-            <input id="article-title" type="text" placeholder="Article title…" required />
-          </div>
-          <div class="form-group" style="min-width:140px">
-            <select id="article-class" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius)">
-              <option value="">No class (all can see)</option>
-            </select>
-          </div>
-          <label class="file-label">
-            📎 Choose PDF
-            <input id="article-file" type="file" accept=".pdf" required />
-          </label>
-          <button class="btn-upload" type="submit">Upload</button>
-        </div>
-        <div class="file-name" id="file-name">No file selected</div>
-        <div class="error-msg" id="upload-error"></div>
-      </form>
-    </div>
-    <div id="articles-container">
-      <div class="loading-wrap"><div class="spinner"></div></div>
-    </div>
-  </div>
-
-  <!-- ── MY ANNOTATIONS TAB ──────────────────────────────────────── -->
-  <div id="tab-my-annotations" class="tab-panel-content" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div>
-        <h3 style="font-size:18px;font-weight:700">My Annotations</h3>
-        <p style="color:var(--muted);font-size:13px;margin-top:2px">내가 남긴 하이라이트, 밑줄, 노트 모아보기</p>
-      </div>
-      <select id="ann-filter-article" style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
-        <option value="">모든 논문</option>
-      </select>
-    </div>
-    <div id="my-annotations-container">
-      <div class="loading-wrap"><div class="spinner"></div></div>
-    </div>
-  </div>
-
-  <!-- ── STUDENTS TAB (instructor only) ─────────────────────────── -->
-  <div id="tab-students" class="tab-panel-content" style="display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div>
-        <h3 style="font-size:18px;font-weight:700">Student Analytics</h3>
-        <p style="color:var(--muted);font-size:13px;margin-top:2px">학생별 어노테이션 현황</p>
-      </div>
-      <select id="student-class-filter" style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
-        <option value="">모든 수업</option>
-      </select>
-    </div>
-    <div id="students-container">
-      <div class="loading-wrap"><div class="spinner"></div></div>
-    </div>
-  </div>
-
-  <!-- ── CLASSES TAB ─────────────────────────────────────────────── -->
-  <div id="tab-classes" class="tab-panel-content" style="display:none">
-    <div id="classes-instructor" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <div>
-          <h3 style="font-size:18px;font-weight:700">My Classes</h3>
-          <p style="color:var(--muted);font-size:13px;margin-top:2px">수업을 개설하고 참여 코드를 학생들에게 공유하세요</p>
-        </div>
-        <button class="btn-upload" id="create-class-btn">+ 수업 개설</button>
-      </div>
-      <div id="classes-list-instructor">
-        <div class="loading-wrap"><div class="spinner"></div></div>
-      </div>
-    </div>
-
-    <div id="classes-student" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <div>
-          <h3 style="font-size:18px;font-weight:700">My Classes</h3>
-          <p style="color:var(--muted);font-size:13px;margin-top:2px">참여 중인 수업 목록</p>
-        </div>
-        <button class="btn-upload" id="join-class-btn">+ 수업 참여</button>
-      </div>
-      <div id="classes-list-student">
-        <div class="loading-wrap"><div class="spinner"></div></div>
-      </div>
-    </div>
+  <div id="classes-container">
+    <div class="loading-wrap"><div class="spinner"></div></div>
   </div>
 </main>
 
@@ -145,7 +59,8 @@
     <h3>수업 참여</h3>
     <div class="form-group">
       <label>참여 코드</label>
-      <input id="join-code-input" type="text" placeholder="예: ABC123" style="width:100%;padding:10px 12px;text-transform:uppercase;letter-spacing:2px;font-size:18px;font-weight:600;text-align:center" maxlength="6" />
+      <input id="join-code-input" type="text" placeholder="ABC123"
+        style="width:100%;padding:12px;text-transform:uppercase;letter-spacing:4px;font-size:22px;font-weight:700;text-align:center" maxlength="6" />
       <div class="hint">교수님께 받은 6자리 코드를 입력하세요</div>
     </div>
     <div class="modal-actions">
@@ -156,20 +71,7 @@
   </div>
 </div>
 
-<!-- Student detail modal -->
-<div class="modal-overlay" id="student-detail-modal">
-  <div class="modal" style="max-width:600px;max-height:80vh;display:flex;flex-direction:column">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <h3 id="student-detail-name" style="margin:0"></h3>
-      <button class="btn-cancel" id="student-detail-close" style="width:auto;padding:6px 14px">닫기</button>
-    </div>
-    <div id="student-detail-stats" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap"></div>
-    <div id="student-detail-list" style="overflow-y:auto;flex:1"></div>
-  </div>
-</div>
-
 <div id="toast" class="toast"></div>
-
 <script src="/static/app.js"></script>
 <script>
 if (!requireAuth()) throw new Error('redirect');
@@ -178,143 +80,71 @@ const user = getUser();
 document.getElementById('user-name').textContent = user.display_name;
 document.getElementById('user-role').textContent = user.role === 'instructor' ? 'Instructor' : 'Student';
 
-// Show/hide role-specific tabs
+const actionBtn = document.getElementById('action-btn');
+actionBtn.style.display = '';
 if (user.role === 'instructor') {
-  document.getElementById('upload-panel').style.display = 'block';
-  document.getElementById('tab-students').style.display = '';
-  document.getElementById('tab-my-annotations').style.display = 'none';
+  document.getElementById('page-sub').textContent = '수업을 개설하고 논문을 업로드하세요.';
+  actionBtn.textContent = '+ 수업 개설';
+  actionBtn.addEventListener('click', () => document.getElementById('create-class-modal').classList.add('open'));
 } else {
-  document.getElementById('tab-my-annotations').style.display = '';
+  document.getElementById('page-sub').textContent = '참여 중인 수업을 선택해 논문을 읽어보세요.';
+  actionBtn.textContent = '+ 수업 참여';
+  actionBtn.addEventListener('click', () => document.getElementById('join-class-modal').classList.add('open'));
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
-let activeTab = 'articles';
-function switchTab(name) {
-  activeTab = name;
-  document.querySelectorAll('.main-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  document.querySelectorAll('.tab-panel-content').forEach(p => p.style.display = 'none');
-  document.getElementById(`tab-${name}`).style.display = 'block';
-
-  if (name === 'articles')       loadArticles();
-  if (name === 'my-annotations') loadMyAnnotations();
-  if (name === 'students')       loadStudents();
-  if (name === 'classes')        loadClasses();
-}
-document.querySelectorAll('.main-tab').forEach(btn => {
-  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-});
-
-// ── File name preview ─────────────────────────────────────────────────────────
-document.getElementById('article-file').addEventListener('change', e => {
-  document.getElementById('file-name').textContent = e.target.files[0]?.name || 'No file selected';
-});
-
-// ── Upload ────────────────────────────────────────────────────────────────────
-document.getElementById('upload-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type=submit]');
-  const err = document.getElementById('upload-error');
-  err.textContent = '';
-  const title   = document.getElementById('article-title').value.trim();
-  const file    = document.getElementById('article-file').files[0];
-  const classId = document.getElementById('article-class').value;
-  if (!title || !file) return;
-  btn.disabled = true; btn.textContent = 'Uploading…';
-  try {
-    const fd = new FormData();
-    fd.append('title', title);
-    fd.append('file', file);
-    if (classId) fd.append('class_id', classId);
-    await API.postForm('/api/articles', fd);
-    document.getElementById('article-title').value = '';
-    document.getElementById('article-file').value = '';
-    document.getElementById('file-name').textContent = 'No file selected';
-    showToast('Article uploaded!');
-    loadArticles();
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    btn.disabled = false; btn.textContent = 'Upload';
-  }
-});
-
-// ── Load articles ─────────────────────────────────────────────────────────────
-async function loadArticles() {
-  const container = document.getElementById('articles-container');
+// ── Load classes ──────────────────────────────────────────────────────────────
+async function loadClasses() {
+  const container = document.getElementById('classes-container');
   container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
   try {
-    const articles = await API.get('/api/articles');
-
-    // Populate class filter in upload form
     const classes = await API.get('/api/classes');
-    const sel = document.getElementById('article-class');
-    sel.innerHTML = '<option value="">No class (all can see)</option>';
-    classes.forEach(c => sel.innerHTML += `<option value="${c.id}">${escHtml(c.name)}</option>`);
-
-    // Populate My Annotations filter
-    const annFilter = document.getElementById('ann-filter-article');
-    annFilter.innerHTML = '<option value="">모든 논문</option>';
-    articles.forEach(a => annFilter.innerHTML += `<option value="${a.id}">${escHtml(a.title)}</option>`);
-
-    if (!articles.length) {
-      container.innerHTML = `<div class="empty-state"><div class="icon">📄</div><p>${user.role === 'instructor' ? 'Upload the first article above!' : 'No articles yet.'}</p></div>`;
+    if (!classes.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">🏫</div>
+          <p>${user.role === 'instructor'
+            ? '"수업 개설" 버튼으로 첫 수업을 만들어보세요!'
+            : '아직 참여한 수업이 없어요.<br>"수업 참여" 버튼으로 코드를 입력해 참여하세요.'}</p>
+        </div>`;
       return;
     }
-    container.innerHTML = '<div class="articles-grid" id="articles-grid"></div>';
-    const grid = document.getElementById('articles-grid');
-    articles.forEach(a => {
+    container.innerHTML = '<div class="classes-grid" id="classes-grid"></div>';
+    const grid = document.getElementById('classes-grid');
+    classes.forEach(cls => {
       const card = document.createElement('div');
-      card.className = 'article-card';
+      card.className = 'class-card';
       card.innerHTML = `
-        <div class="article-info" style="flex:1">
-          <div class="title-row" data-id="${a.id}">
-            <h4 class="title-text">${escHtml(a.title)}</h4>
-            ${user.role === 'instructor' ? `<button class="btn-edit-title" data-id="${a.id}" data-title="${escHtml(a.title)}" title="제목 수정">✏️</button>` : ''}
-          </div>
-          <div class="article-meta">
-            Uploaded by ${escHtml(a.uploaded_by_name)} · ${fmtDate(a.created_at)}
+        <div class="class-card-top">
+          <div class="class-card-icon">${cls.name.charAt(0)}</div>
+          <div style="flex:1;min-width:0">
+            <h3 class="class-card-name">${escHtml(cls.name)}</h3>
+            ${cls.description ? `<p class="class-card-desc">${escHtml(cls.description)}</p>` : ''}
           </div>
         </div>
-        <div class="article-actions">
-          ${user.role === 'instructor' ? `<button class="btn-delete" data-id="${a.id}">Delete</button>` : ''}
-          <button class="btn-read" data-id="${a.id}">Read →</button>
+        <div class="class-card-stats">
+          <span>📄 논문 ${cls.article_count}개</span>
+          <span>👥 ${cls.member_count}명</span>
+          ${user.role === 'instructor' ? `
+            <span class="class-code-inline" title="참여 코드 클릭해서 복사" onclick="copyCode('${cls.join_code}',event)">
+              🔑 ${cls.join_code}
+            </span>` : ''}
+        </div>
+        <div class="class-card-footer">
+          <button class="class-enter-btn" data-id="${cls.id}">수업 입장 →</button>
+          ${user.role === 'instructor' ? `<button class="class-delete-btn" data-id="${cls.id}" data-name="${escHtml(cls.name)}">삭제</button>` : ''}
         </div>`;
       grid.appendChild(card);
     });
 
-    grid.querySelectorAll('.btn-read').forEach(btn =>
-      btn.addEventListener('click', () => window.location.href = `/reader/${btn.dataset.id}`)
+    grid.querySelectorAll('.class-enter-btn').forEach(btn =>
+      btn.addEventListener('click', () => window.location.href = `/class/${btn.dataset.id}`)
     );
-    grid.querySelectorAll('.btn-edit-title').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const titleRow = btn.closest('.title-row');
-        const oldTitle = btn.dataset.title;
-        const id = btn.dataset.id;
-        titleRow.innerHTML = `
-          <input class="inline-title-input" value="${escHtml(oldTitle)}" style="flex:1;font-size:15px;font-weight:600;padding:4px 8px;border:2px solid var(--primary);border-radius:6px;outline:none" />
-          <button class="btn-save-title" style="background:var(--primary);color:#fff;padding:4px 12px;border-radius:6px;font-size:13px;margin-left:6px">저장</button>
-          <button class="btn-cancel-title" style="background:var(--bg);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:13px;margin-left:4px">취소</button>`;
-        const input = titleRow.querySelector('.inline-title-input');
-        input.focus(); input.select();
-        async function saveTitle() {
-          const newTitle = input.value.trim();
-          if (!newTitle) return;
-          await fetch(`/api/articles/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json','Authorization':`Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify({title: newTitle}) });
-          showToast('제목이 수정됐어요!'); loadArticles();
-        }
-        titleRow.querySelector('.btn-save-title').addEventListener('click', saveTitle);
-        titleRow.querySelector('.btn-cancel-title').addEventListener('click', loadArticles);
-        input.addEventListener('keydown', e => { if (e.key==='Enter') saveTitle(); if (e.key==='Escape') loadArticles(); });
-      });
-    });
-    grid.querySelectorAll('.btn-delete').forEach(btn => {
+    grid.querySelectorAll('.class-delete-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!confirm('Delete this article and all its annotations?')) return;
-        btn.disabled = true;
-        try { await API.del(`/api/articles/${btn.dataset.id}`); showToast('Deleted.'); loadArticles(); }
-        catch { btn.disabled = false; }
+        if (!confirm(`"${btn.dataset.name}" 수업을 삭제할까요?`)) return;
+        await API.del(`/api/classes/${btn.dataset.id}`);
+        showToast('수업이 삭제됐어요.'); loadClasses();
       });
     });
   } catch (ex) {
@@ -322,231 +152,13 @@ async function loadArticles() {
   }
 }
 
-// ── My Annotations ────────────────────────────────────────────────────────────
-document.getElementById('ann-filter-article').addEventListener('change', loadMyAnnotations);
-
-async function loadMyAnnotations() {
-  const container = document.getElementById('my-annotations-container');
-  container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
-  const articleId = document.getElementById('ann-filter-article').value;
-  try {
-    const url = articleId ? `/api/my-annotations?article_id=${articleId}` : '/api/my-annotations';
-    const anns = await API.get(url);
-    if (!anns.length) {
-      container.innerHTML = '<div class="empty-state"><div class="icon">🖊</div><p>아직 어노테이션이 없어요.<br>논문을 읽으면서 하이라이트나 노트를 남겨보세요!</p></div>';
-      return;
-    }
-    // Group by article
-    const grouped = {};
-    anns.forEach(a => {
-      const key = a.article_id;
-      if (!grouped[key]) grouped[key] = { title: a.article_title, id: a.article_id, items: [] };
-      grouped[key].items.push(a);
-    });
-    container.innerHTML = '';
-    Object.values(grouped).forEach(group => {
-      const section = document.createElement('div');
-      section.style.cssText = 'margin-bottom:24px';
-      section.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <h4 style="font-size:15px;font-weight:700">${escHtml(group.title)}</h4>
-          <button class="btn-read" data-id="${group.id}" style="font-size:12px;padding:5px 12px">Read →</button>
-        </div>
-        <div class="ann-overview-list"></div>`;
-      section.querySelector('.btn-read').addEventListener('click', () => window.location.href = `/reader/${group.id}`);
-      const list = section.querySelector('.ann-overview-list');
-      group.items.forEach(ann => {
-        const item = document.createElement('div');
-        item.className = 'ann-overview-item';
-        const typeLabel = {highlight:'Highlight',underline:'Underline',note:'Note'}[ann.type];
-        const preview = ann.type === 'note' ? ann.data.text : (ann.data.selectedText || '');
-        item.innerHTML = `
-          <span class="ann-type-badge ${ann.type}">${typeLabel}</span>
-          <span style="font-size:12px;color:var(--muted);margin:0 8px">p.${ann.page}</span>
-          <span style="font-size:13px;flex:1">${preview ? `"${escHtml(preview.slice(0,120))}"` : ''}</span>
-          <span style="font-size:11px;color:var(--muted)">${fmtDate(ann.created_at)}</span>`;
-        list.appendChild(item);
-      });
-      container.appendChild(section);
-    });
-  } catch (ex) {
-    container.innerHTML = `<p style="color:var(--danger)">${ex.message}</p>`;
-  }
+function copyCode(code, e) {
+  e.stopPropagation();
+  navigator.clipboard.writeText(code);
+  showToast(`참여 코드 복사됨: ${code}`);
 }
 
-// ── Students (instructor) ─────────────────────────────────────────────────────
-document.getElementById('student-class-filter').addEventListener('change', loadStudents);
-
-async function loadStudents() {
-  if (user.role !== 'instructor') return;
-  const container = document.getElementById('students-container');
-  container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
-
-  // populate class filter
-  const classes = await API.get('/api/classes');
-  const sel = document.getElementById('student-class-filter');
-  const current = sel.value;
-  sel.innerHTML = '<option value="">모든 수업</option>';
-  classes.forEach(c => sel.innerHTML += `<option value="${c.id}">${escHtml(c.name)}</option>`);
-  if (current) sel.value = current;
-
-  const classId = sel.value;
-  try {
-    let students;
-    if (classId) {
-      students = await API.get(`/api/classes/${classId}/members`);
-    } else {
-      // Gather all students from all classes (deduplicated)
-      const allStudents = {};
-      for (const cls of classes) {
-        const members = await API.get(`/api/classes/${cls.id}/members`);
-        members.forEach(s => { allStudents[s.id] = s; });
-      }
-      students = Object.values(allStudents);
-    }
-    if (!students.length) {
-      container.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>아직 수업에 참여한 학생이 없어요.</p></div>';
-      return;
-    }
-    container.innerHTML = '';
-    students.forEach(s => {
-      const card = document.createElement('div');
-      card.className = 'article-card';
-      card.style.cursor = 'pointer';
-      card.innerHTML = `
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <span style="width:32px;height:32px;border-radius:50%;background:${userColor(s.id)};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">${s.display_name.charAt(0)}</span>
-            <div>
-              <div style="font-weight:600;font-size:14px">${escHtml(s.display_name)}</div>
-              <div style="font-size:12px;color:var(--muted)">@${escHtml(s.username)}</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <span class="ann-stat-badge">전체 <strong>${s.annotation_count||0}</strong></span>
-            <span class="ann-stat-badge highlight-bg">하이라이트 <strong>${s.highlight_count||0}</strong></span>
-            <span class="ann-stat-badge underline-bg">밑줄 <strong>${s.underline_count||0}</strong></span>
-            <span class="ann-stat-badge note-bg">노트 <strong>${s.note_count||0}</strong></span>
-          </div>
-        </div>
-        <button class="btn-read" style="font-size:12px;padding:6px 14px">상세보기 →</button>`;
-      card.querySelector('.btn-read').addEventListener('click', () => showStudentDetail(s));
-      container.appendChild(card);
-    });
-  } catch (ex) {
-    container.innerHTML = `<p style="color:var(--danger)">${ex.message}</p>`;
-  }
-}
-
-function showStudentDetail(s) {
-  document.getElementById('student-detail-name').textContent = s.display_name + '의 어노테이션';
-  const statsEl = document.getElementById('student-detail-stats');
-  statsEl.innerHTML = `
-    <span class="ann-stat-badge">전체 <strong>${s.annotation_count||0}</strong></span>
-    <span class="ann-stat-badge highlight-bg">하이라이트 <strong>${s.highlight_count||0}</strong></span>
-    <span class="ann-stat-badge underline-bg">밑줄 <strong>${s.underline_count||0}</strong></span>
-    <span class="ann-stat-badge note-bg">노트 <strong>${s.note_count||0}</strong></span>`;
-  const listEl = document.getElementById('student-detail-list');
-  if (!s.annotations || !s.annotations.length) {
-    listEl.innerHTML = '<p style="color:var(--muted);font-size:13px">어노테이션이 없습니다.</p>';
-  } else {
-    const grouped = {};
-    s.annotations.forEach(a => {
-      if (!grouped[a.article_id]) grouped[a.article_id] = { title: a.article_title, items: [] };
-      grouped[a.article_id].items.push(a);
-    });
-    listEl.innerHTML = '';
-    Object.values(grouped).forEach(g => {
-      const sec = document.createElement('div');
-      sec.style.marginBottom = '16px';
-      sec.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${escHtml(g.title)}</div>`;
-      g.items.forEach(ann => {
-        const preview = ann.type === 'note' ? ann.data.text : (ann.data.selectedText || '');
-        const item = document.createElement('div');
-        item.className = 'ann-overview-item';
-        item.innerHTML = `
-          <span class="ann-type-badge ${ann.type}">${{highlight:'Highlight',underline:'Underline',note:'Note'}[ann.type]}</span>
-          <span style="font-size:12px;color:var(--muted);margin:0 8px">p.${ann.page}</span>
-          <span style="font-size:13px;flex:1">${preview ? `"${escHtml(preview.slice(0,100))}"` : ''}</span>`;
-        sec.appendChild(item);
-      });
-      listEl.appendChild(sec);
-    });
-  }
-  document.getElementById('student-detail-modal').classList.add('open');
-}
-document.getElementById('student-detail-close').addEventListener('click', () =>
-  document.getElementById('student-detail-modal').classList.remove('open')
-);
-
-// ── Classes ───────────────────────────────────────────────────────────────────
-async function loadClasses() {
-  if (user.role === 'instructor') {
-    document.getElementById('classes-instructor').style.display = 'block';
-    document.getElementById('classes-student').style.display = 'none';
-  } else {
-    document.getElementById('classes-instructor').style.display = 'none';
-    document.getElementById('classes-student').style.display = 'block';
-  }
-
-  const classes = await API.get('/api/classes');
-
-  if (user.role === 'instructor') {
-    const container = document.getElementById('classes-list-instructor');
-    if (!classes.length) {
-      container.innerHTML = '<div class="empty-state"><div class="icon">🏫</div><p>아직 개설한 수업이 없어요.<br>"수업 개설" 버튼을 눌러 첫 수업을 만들어보세요!</p></div>';
-      return;
-    }
-    container.innerHTML = '';
-    classes.forEach(cls => {
-      const card = document.createElement('div');
-      card.className = 'article-card';
-      card.innerHTML = `
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:15px;margin-bottom:4px">${escHtml(cls.name)}</div>
-          ${cls.description ? `<div style="font-size:13px;color:var(--muted);margin-bottom:8px">${escHtml(cls.description)}</div>` : ''}
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:12px;color:var(--muted)">참여 코드</span>
-              <span style="font-family:monospace;font-size:16px;font-weight:700;letter-spacing:3px;color:var(--primary);background:#EEF2FF;padding:3px 10px;border-radius:6px">${cls.join_code}</span>
-              <button onclick="copyCode('${cls.join_code}')" style="background:none;font-size:13px;color:var(--muted);padding:2px 6px" title="복사">📋</button>
-            </div>
-            <span style="font-size:12px;color:var(--muted)">👥 ${cls.member_count}명</span>
-          </div>
-        </div>
-        <button class="btn-delete" data-id="${cls.id}">삭제</button>`;
-      card.querySelector('.btn-delete').addEventListener('click', async () => {
-        if (!confirm(`"${cls.name}" 수업을 삭제할까요?`)) return;
-        await API.del(`/api/classes/${cls.id}`);
-        showToast('수업이 삭제됐어요.'); loadClasses();
-      });
-      container.appendChild(card);
-    });
-  } else {
-    const container = document.getElementById('classes-list-student');
-    if (!classes.length) {
-      container.innerHTML = '<div class="empty-state"><div class="icon">🏫</div><p>아직 참여한 수업이 없어요.<br>교수님께 참여 코드를 받아 입력해보세요!</p></div>';
-      return;
-    }
-    container.innerHTML = '';
-    classes.forEach(cls => {
-      const card = document.createElement('div');
-      card.className = 'article-card';
-      card.innerHTML = `
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:15px;margin-bottom:4px">${escHtml(cls.name)}</div>
-          ${cls.description ? `<div style="font-size:13px;color:var(--muted)">${escHtml(cls.description)}</div>` : ''}
-        </div>
-        <span style="font-size:12px;color:var(--muted)">👥 ${cls.member_count}명 참여 중</span>`;
-      container.appendChild(card);
-    });
-  }
-}
-
-// Create class
-document.getElementById('create-class-btn') && document.getElementById('create-class-btn').addEventListener('click', () =>
-  document.getElementById('create-class-modal').classList.add('open')
-);
+// ── Create class ──────────────────────────────────────────────────────────────
 document.getElementById('create-class-cancel').addEventListener('click', () =>
   document.getElementById('create-class-modal').classList.remove('open')
 );
@@ -557,19 +169,16 @@ document.getElementById('create-class-save').addEventListener('click', async () 
   if (!name) { err.textContent = '수업명을 입력해주세요.'; return; }
   err.textContent = '';
   try {
-    await API.post('/api/classes', { name, description: desc });
+    const cls = await API.post('/api/classes', { name, description: desc });
     document.getElementById('create-class-modal').classList.remove('open');
     document.getElementById('class-name-input').value = '';
     document.getElementById('class-desc-input').value = '';
-    showToast('수업이 개설됐어요! 🎉');
+    showToast(`"${cls.name}" 수업 개설 완료! 🎉`);
     loadClasses();
   } catch (ex) { err.textContent = ex.message; }
 });
 
-// Join class
-document.getElementById('join-class-btn') && document.getElementById('join-class-btn').addEventListener('click', () =>
-  document.getElementById('join-class-modal').classList.add('open')
-);
+// ── Join class ────────────────────────────────────────────────────────────────
 document.getElementById('join-class-cancel').addEventListener('click', () =>
   document.getElementById('join-class-modal').classList.remove('open')
 );
@@ -590,21 +199,11 @@ document.getElementById('join-class-save').addEventListener('click', async () =>
   } catch (ex) { err.textContent = ex.message; }
 });
 
-function copyCode(code) {
-  navigator.clipboard.writeText(code);
-  showToast(`코드 복사됨: ${code}`);
-}
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function fmtDate(s) {
-  return new Date(s + (s.includes('Z') ? '' : 'Z')).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' });
-}
 
-// Initial load
-loadArticles();
+loadClasses();
 </script>
 </body>
 </html>

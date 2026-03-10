@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Reader</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <button class="btn-back" onclick="window.location.href='/articles'">← Classes</button>
+  <div style="flex:1;display:flex;align-items:center;gap:10px;overflow:hidden;padding:0 8px">
+    <span class="toolbar-title" id="class-title">Loading…</span>
+    <span id="class-code-badge" style="display:none;font-family:monospace;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--primary);background:#EEF2FF;padding:3px 10px;border-radius:6px;cursor:pointer;flex-shrink:0" title="클릭해서 복사"></span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge">
+      <span id="user-name"></span>
+      <span class="role-tag" id="user-role"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()">Sign out</button>
+  </div>
+</header>
+
+<main class="page-body">
+  <!-- Tab bar -->
+  <div class="main-tabs">
+    <button class="main-tab active" data-tab="articles">📄 Articles</button>
+    <button class="main-tab" data-tab="my-annotations" id="tab-btn-my">🖊 My Annotations</button>
+    <button class="main-tab" data-tab="students" id="tab-btn-students" style="display:none">👥 Students</button>
+  </div>
+
+  <!-- ── ARTICLES TAB ────────────────────────────────────────── -->
+  <div id="tab-articles" class="tab-panel-content">
+    <!-- Upload panel (instructor only) -->
+    <div class="upload-panel" id="upload-panel" style="display:none">
+      <h3>논문 업로드</h3>
+      <form id="upload-form">
+        <div class="upload-row">
+          <div class="form-group" style="flex:1">
+            <input id="article-title" type="text" placeholder="논문 제목…" required />
+          </div>
+          <label class="file-label">
+            📎 PDF 선택
+            <input id="article-file" type="file" accept=".pdf" required />
+          </label>
+          <button class="btn-upload" type="submit">업로드</button>
+        </div>
+        <div class="file-name" id="file-name">선택된 파일 없음</div>
+        <div class="error-msg" id="upload-error"></div>
+      </form>
+    </div>
+
+    <div id="articles-container">
+      <div class="loading-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- ── MY ANNOTATIONS TAB ────────────────────────────────── -->
+  <div id="tab-my-annotations" class="tab-panel-content" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h3 style="font-size:18px;font-weight:700">My Annotations</h3>
+        <p style="color:var(--muted);font-size:13px;margin-top:2px">이 수업에서 내가 남긴 어노테이션</p>
+      </div>
+      <select id="ann-filter-article" style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+        <option value="">모든 논문</option>
+      </select>
+    </div>
+    <div id="my-annotations-container">
+      <div class="loading-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- ── STUDENTS TAB (instructor) ─────────────────────────── -->
+  <div id="tab-students" class="tab-panel-content" style="display:none">
+    <div style="margin-bottom:16px">
+      <h3 style="font-size:18px;font-weight:700">Student Analytics</h3>
+      <p style="color:var(--muted);font-size:13px;margin-top:2px">이 수업 학생들의 어노테이션 현황</p>
+    </div>
+    <div id="students-container">
+      <div class="loading-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+</main>
+
+<!-- Student detail modal -->
+<div class="modal-overlay" id="student-detail-modal">
+  <div class="modal" style="max-width:600px;max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 id="student-detail-name" style="margin:0"></h3>
+      <button class="btn-cancel" id="student-detail-close" style="width:auto;padding:6px 14px">닫기</button>
+    </div>
+    <div id="student-detail-stats" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap"></div>
+    <div id="student-detail-list" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+<script>
+if (!requireAuth()) throw new Error('redirect');
+
+const user = getUser();
+const classId = parseInt(window.location.pathname.split('/').pop(), 10);
+
+document.getElementById('user-name').textContent = user.display_name;
+document.getElementById('user-role').textContent = user.role === 'instructor' ? 'Instructor' : 'Student';
+
+if (user.role === 'instructor') {
+  document.getElementById('upload-panel').style.display = 'block';
+  document.getElementById('tab-btn-students').style.display = '';
+  document.getElementById('tab-btn-my').style.display = 'none';
+} else {
+  document.getElementById('tab-btn-my').style.display = '';
+}
+
+// ── Load class info ────────────────────────────────────────────────────────────
+async function loadClassInfo() {
+  try {
+    const cls = await API.get(`/api/classes/${classId}/info`);
+    document.getElementById('class-title').textContent = cls.name;
+    document.title = cls.name + ' — Social Reader';
+    if (user.role === 'instructor') {
+      const badge = document.getElementById('class-code-badge');
+      badge.style.display = '';
+      badge.textContent = '🔑 ' + cls.join_code;
+      badge.addEventListener('click', () => {
+        navigator.clipboard.writeText(cls.join_code);
+        showToast(`참여 코드 복사됨: ${cls.join_code}`);
+      });
+    }
+  } catch {}
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.main-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel-content').forEach(p => p.style.display = 'none');
+  document.getElementById(`tab-${name}`).style.display = 'block';
+  if (name === 'articles')       loadArticles();
+  if (name === 'my-annotations') loadMyAnnotations();
+  if (name === 'students')       loadStudents();
+}
+document.querySelectorAll('.main-tab').forEach(btn =>
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+);
+
+// ── Upload ─────────────────────────────────────────────────────────────────────
+document.getElementById('article-file').addEventListener('change', e =>
+  document.getElementById('file-name').textContent = e.target.files[0]?.name || '선택된 파일 없음'
+);
+document.getElementById('upload-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  const err = document.getElementById('upload-error');
+  err.textContent = '';
+  const title = document.getElementById('article-title').value.trim();
+  const file  = document.getElementById('article-file').files[0];
+  if (!title || !file) return;
+  btn.disabled = true; btn.textContent = '업로드 중…';
+  try {
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('file', file);
+    fd.append('class_id', classId);
+    await API.postForm('/api/articles', fd);
+    document.getElementById('article-title').value = '';
+    document.getElementById('article-file').value = '';
+    document.getElementById('file-name').textContent = '선택된 파일 없음';
+    showToast('업로드 완료!');
+    loadArticles();
+  } catch (ex) { err.textContent = ex.message; }
+  finally { btn.disabled = false; btn.textContent = '업로드'; }
+});
+
+// ── Articles ───────────────────────────────────────────────────────────────────
+async function loadArticles() {
+  const container = document.getElementById('articles-container');
+  container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+  try {
+    const articles = await API.get(`/api/articles?class_id=${classId}`);
+
+    // Populate My Annotations filter
+    const annFilter = document.getElementById('ann-filter-article');
+    annFilter.innerHTML = '<option value="">모든 논문</option>';
+    articles.forEach(a => annFilter.innerHTML += `<option value="${a.id}">${escHtml(a.title)}</option>`);
+
+    if (!articles.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">📄</div>
+          <p>${user.role === 'instructor' ? '위에서 첫 논문을 업로드해보세요!' : '아직 업로드된 논문이 없어요.'}</p>
+        </div>`;
+      return;
+    }
+    container.innerHTML = '<div class="articles-grid" id="articles-grid"></div>';
+    const grid = document.getElementById('articles-grid');
+    articles.forEach(a => {
+      const card = document.createElement('div');
+      card.className = 'article-card';
+      card.innerHTML = `
+        <div class="article-info" style="flex:1">
+          <div class="title-row" data-id="${a.id}">
+            <h4 class="title-text">${escHtml(a.title)}</h4>
+            ${user.role === 'instructor' ? `<button class="btn-edit-title" data-id="${a.id}" data-title="${escHtml(a.title)}" title="제목 수정">✏️</button>` : ''}
+          </div>
+          <div class="article-meta">
+            by ${escHtml(a.uploaded_by_name)} · ${fmtDate(a.created_at)}
+          </div>
+        </div>
+        <div class="article-actions">
+          ${user.role === 'instructor' ? `<button class="btn-delete" data-id="${a.id}">삭제</button>` : ''}
+          <button class="btn-read" data-id="${a.id}">읽기 →</button>
+        </div>`;
+      grid.appendChild(card);
+    });
+
+    grid.querySelectorAll('.btn-read').forEach(btn =>
+      btn.addEventListener('click', () => window.location.href = `/reader/${btn.dataset.id}`)
+    );
+    grid.querySelectorAll('.btn-edit-title').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const titleRow = btn.closest('.title-row');
+        const oldTitle = btn.dataset.title;
+        const id = btn.dataset.id;
+        titleRow.innerHTML = `
+          <input class="inline-title-input" value="${escHtml(oldTitle)}" style="flex:1;font-size:15px;font-weight:600;padding:4px 8px;border:2px solid var(--primary);border-radius:6px;outline:none" />
+          <button class="btn-save-title" style="background:var(--primary);color:#fff;padding:4px 12px;border-radius:6px;font-size:13px;margin-left:6px">저장</button>
+          <button class="btn-cancel-title" style="background:var(--bg);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:13px;margin-left:4px">취소</button>`;
+        const input = titleRow.querySelector('.inline-title-input');
+        input.focus(); input.select();
+        async function saveTitle() {
+          const newTitle = input.value.trim();
+          if (!newTitle) return;
+          await fetch(`/api/articles/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json','Authorization':`Bearer ${localStorage.getItem('token')}`}, body: JSON.stringify({title:newTitle}) });
+          showToast('제목 수정 완료!'); loadArticles();
+        }
+        titleRow.querySelector('.btn-save-title').addEventListener('click', saveTitle);
+        titleRow.querySelector('.btn-cancel-title').addEventListener('click', loadArticles);
+        input.addEventListener('keydown', e => { if (e.key==='Enter') saveTitle(); if (e.key==='Escape') loadArticles(); });
+      });
+    });
+    grid.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('이 논문과 모든 어노테이션을 삭제할까요?')) return;
+        btn.disabled = true;
+        try { await API.del(`/api/articles/${btn.dataset.id}`); showToast('삭제됐어요.'); loadArticles(); }
+        catch { btn.disabled = false; }
+      });
+    });
+  } catch (ex) {
+    container.innerHTML = `<p style="color:var(--danger)">${ex.message}</p>`;
+  }
+}
+
+// ── My Annotations ─────────────────────────────────────────────────────────────
+document.getElementById('ann-filter-article').addEventListener('change', loadMyAnnotations);
+
+async function loadMyAnnotations() {
+  const container = document.getElementById('my-annotations-container');
+  container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+  const articleId = document.getElementById('ann-filter-article').value;
+  try {
+    const url = articleId ? `/api/my-annotations?article_id=${articleId}` : '/api/my-annotations';
+    const anns = await API.get(url);
+
+    // Filter to only this class's articles
+    const classArticles = await API.get(`/api/articles?class_id=${classId}`);
+    const classArticleIds = new Set(classArticles.map(a => a.id));
+    const filtered = anns.filter(a => classArticleIds.has(a.article_id));
+
+    if (!filtered.length) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">🖊</div><p>아직 어노테이션이 없어요.<br>논문을 읽으면서 하이라이트나 노트를 남겨보세요!</p></div>';
+      return;
+    }
+    const grouped = {};
+    filtered.forEach(a => {
+      if (!grouped[a.article_id]) grouped[a.article_id] = { title: a.article_title, id: a.article_id, items: [] };
+      grouped[a.article_id].items.push(a);
+    });
+    container.innerHTML = '';
+    Object.values(grouped).forEach(group => {
+      const section = document.createElement('div');
+      section.style.cssText = 'margin-bottom:24px';
+      section.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <h4 style="font-size:15px;font-weight:700">${escHtml(group.title)}</h4>
+          <button class="btn-read" data-id="${group.id}" style="font-size:12px;padding:5px 12px">읽기 →</button>
+        </div>
+        <div class="ann-overview-list"></div>`;
+      section.querySelector('.btn-read').addEventListener('click', () => window.location.href = `/reader/${group.id}`);
+      const list = section.querySelector('.ann-overview-list');
+      group.items.forEach(ann => {
+        const preview = ann.type === 'note' ? ann.data.text : (ann.data.selectedText || '');
+        const item = document.createElement('div');
+        item.className = 'ann-overview-item';
+        item.innerHTML = `
+          <span class="ann-type-badge ${ann.type}">${{highlight:'Highlight',underline:'Underline',note:'Note'}[ann.type]}</span>
+          <span style="font-size:12px;color:var(--muted);margin:0 8px">p.${ann.page}</span>
+          <span style="font-size:13px;flex:1">${preview ? `"${escHtml(preview.slice(0,120))}"` : ''}</span>
+          <span style="font-size:11px;color:var(--muted)">${fmtDate(ann.created_at)}</span>`;
+        list.appendChild(item);
+      });
+      container.appendChild(section);
+    });
+  } catch (ex) {
+    container.innerHTML = `<p style="color:var(--danger)">${ex.message}</p>`;
+  }
+}
+
+// ── Students (instructor) ──────────────────────────────────────────────────────
+async function loadStudents() {
+  const container = document.getElementById('students-container');
+  container.innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+  try {
+    const students = await API.get(`/api/classes/${classId}/members`);
+    if (!students.length) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>아직 이 수업에 참여한 학생이 없어요.</p></div>';
+      return;
+    }
+    container.innerHTML = '';
+    students.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'article-card';
+      card.innerHTML = `
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="width:34px;height:34px;border-radius:50%;background:${userColor(s.id)};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0">${s.display_name.charAt(0)}</span>
+            <div>
+              <div style="font-weight:600;font-size:14px">${escHtml(s.display_name)}</div>
+              <div style="font-size:12px;color:var(--muted)">@${escHtml(s.username)}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="ann-stat-badge">전체 <strong>${s.annotation_count||0}</strong></span>
+            <span class="ann-stat-badge highlight-bg">하이라이트 <strong>${s.highlight_count||0}</strong></span>
+            <span class="ann-stat-badge underline-bg">밑줄 <strong>${s.underline_count||0}</strong></span>
+            <span class="ann-stat-badge note-bg">노트 <strong>${s.note_count||0}</strong></span>
+          </div>
+        </div>
+        <button class="btn-read" style="font-size:12px;padding:6px 14px">상세보기 →</button>`;
+      card.querySelector('.btn-read').addEventListener('click', () => showStudentDetail(s));
+      container.appendChild(card);
+    });
+  } catch (ex) {
+    container.innerHTML = `<p style="color:var(--danger)">${ex.message}</p>`;
+  }
+}
+
+function showStudentDetail(s) {
+  document.getElementById('student-detail-name').textContent = s.display_name + '의 어노테이션';
+  document.getElementById('student-detail-stats').innerHTML = `
+    <span class="ann-stat-badge">전체 <strong>${s.annotation_count||0}</strong></span>
+    <span class="ann-stat-badge highlight-bg">하이라이트 <strong>${s.highlight_count||0}</strong></span>
+    <span class="ann-stat-badge underline-bg">밑줄 <strong>${s.underline_count||0}</strong></span>
+    <span class="ann-stat-badge note-bg">노트 <strong>${s.note_count||0}</strong></span>`;
+  const listEl = document.getElementById('student-detail-list');
+  if (!s.annotations?.length) {
+    listEl.innerHTML = '<p style="color:var(--muted);font-size:13px">어노테이션이 없습니다.</p>';
+  } else {
+    const grouped = {};
+    s.annotations.forEach(a => {
+      if (!grouped[a.article_id]) grouped[a.article_id] = { title: a.article_title, items: [] };
+      grouped[a.article_id].items.push(a);
+    });
+    listEl.innerHTML = '';
+    Object.values(grouped).forEach(g => {
+      const sec = document.createElement('div');
+      sec.style.marginBottom = '16px';
+      sec.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${escHtml(g.title)}</div>`;
+      g.items.forEach(ann => {
+        const preview = ann.type === 'note' ? ann.data.text : (ann.data.selectedText || '');
+        const item = document.createElement('div');
+        item.className = 'ann-overview-item';
+        item.innerHTML = `
+          <span class="ann-type-badge ${ann.type}">${{highlight:'Highlight',underline:'Underline',note:'Note'}[ann.type]}</span>
+          <span style="font-size:12px;color:var(--muted);margin:0 8px">p.${ann.page}</span>
+          <span style="font-size:13px;flex:1">${preview ? `"${escHtml(preview.slice(0,100))}"` : ''}</span>`;
+        sec.appendChild(item);
+      });
+      listEl.appendChild(sec);
+    });
+  }
+  document.getElementById('student-detail-modal').classList.add('open');
+}
+document.getElementById('student-detail-close').addEventListener('click', () =>
+  document.getElementById('student-detail-modal').classList.remove('open')
+);
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(s) {
+  return new Date(s + (s.includes('Z') ? '' : 'Z')).toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' });
+}
+
+loadClassInfo();
+loadArticles();
+</script>
+</body>
+</html>
