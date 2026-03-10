@@ -22,7 +22,11 @@ const TOOLS = ['select', 'highlight', 'underline', 'note', 'erase'];
 function setTool(name) {
   currentTool = name;
   TOOLS.forEach(t => document.getElementById(`tool-${t}`).classList.toggle('active', t === name));
-  // update cursor on all annotation layers
+  // note 모드: textLayer를 pointer-events:none으로 해서 wrapper 클릭이 통과되게 함
+  document.querySelectorAll('.textLayer').forEach(el => {
+    el.style.pointerEvents = name === 'note' ? 'none' : '';
+  });
+  // 커서 업데이트
   document.querySelectorAll('.annotation-layer').forEach(el => {
     el.classList.remove('note-mode', 'erase-mode');
     if (name === 'note')  el.classList.add('note-mode');
@@ -223,12 +227,11 @@ function setupPageEvents(wrapper, svg, pageNum) {
     });
   });
 
-  // Note: click on annotation layer
-  svg.addEventListener('click', (e) => {
+  // Note: click on wrapper (SVG는 pointer-events:none이므로 wrapper로 이벤트 전달됨)
+  wrapper.addEventListener('click', (e) => {
     if (currentTool !== 'note') return;
-    // Don't trigger if clicking an existing annotation
-    if (e.target !== svg && e.target.closest('.ann-group')) return;
-    const rect = svg.getBoundingClientRect();
+    if (e.target.closest('.ann-group')) return; // 기존 어노테이션 클릭은 무시
+    const rect = wrapper.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top)  / rect.height;
     pendingNote = { pageNum, x, y };
@@ -272,12 +275,12 @@ function renderAnnotationsForPage(pageNum) {
           rect.setAttribute('rx', '2');
           g.appendChild(rect);
         } else {
-          // underline: a line at the bottom of the rect
+          // underline: a line just below the text (not overlapping)
           const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           line.setAttribute('x1', px.x);
           line.setAttribute('x2', px.x + px.w);
-          line.setAttribute('y1', px.y + px.h - 1);
-          line.setAttribute('y2', px.y + px.h - 1);
+          line.setAttribute('y1', px.y + px.h + 2);
+          line.setAttribute('y2', px.y + px.h + 2);
           line.setAttribute('stroke', color);
           line.setAttribute('stroke-width', '2');
           g.appendChild(line);
@@ -322,8 +325,17 @@ function renderAnnotationsForPage(pageNum) {
       g.appendChild(text);
     }
 
-    // erase click
+    // ann-group은 항상 클릭 가능 (SVG pointer-events: none 을 오버라이드)
+    g.style.pointerEvents = 'all';
+    g.style.cursor = 'pointer';
+
     g.addEventListener('click', async (e) => {
+      // select 모드: 댓글 패널 열기
+      if (currentTool === 'select') {
+        e.stopPropagation();
+        openCommentPanel(ann);
+        return;
+      }
       if (currentTool !== 'erase') return;
       e.stopPropagation();
       const canDelete = ann.user_id === currentUser.id || currentUser.role === 'instructor';
@@ -372,6 +384,7 @@ function showAnnotationTooltip(e, ann) {
   } else if (ann.data.selectedText) {
     html += `<br><em style="opacity:0.75">"${escHtml(ann.data.selectedText.slice(0, 80))}"</em>`;
   }
+  html += `<br><span style="opacity:0.5;font-size:11px">💬 Select 모드에서 클릭하면 댓글 달기</span>`;
   tooltip.innerHTML = html;
   document.body.appendChild(tooltip);
   positionTooltip(e);
