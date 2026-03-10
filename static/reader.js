@@ -145,20 +145,23 @@ async function loadPDF() {
 async function renderPage(pageNum) {
   const page    = await pdfDoc.getPage(pageNum);
   const viewer  = document.getElementById('pdf-viewer');
+  const dpr     = window.devicePixelRatio || 1;
   const scale   = Math.min((viewer.clientWidth - 40) / page.getViewport({ scale: 1 }).width, 2.0);
   const viewport = page.getViewport({ scale });
 
-  // wrapper
+  // wrapper — CSS size = 논리 픽셀
   const wrapper = document.createElement('div');
   wrapper.className = 'page-wrapper';
   wrapper.dataset.page = pageNum;
   wrapper.style.width  = `${viewport.width}px`;
   wrapper.style.height = `${viewport.height}px`;
 
-  // canvas
+  // canvas — 실제 픽셀은 dpr 배로 키우고 CSS로 축소 → Retina 선명하게
   const canvas = document.createElement('canvas');
-  canvas.width  = viewport.width;
-  canvas.height = viewport.height;
+  canvas.width  = viewport.width  * dpr;
+  canvas.height = viewport.height * dpr;
+  canvas.style.width  = `${viewport.width}px`;
+  canvas.style.height = `${viewport.height}px`;
   wrapper.appendChild(canvas);
 
   // text layer
@@ -178,8 +181,10 @@ async function renderPage(pageNum) {
 
   viewer.appendChild(wrapper);
 
-  // render PDF canvas
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  // render PDF canvas (dpr 적용으로 Retina 선명하게)
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  await page.render({ canvasContext: ctx, viewport }).promise;
 
   // render text layer
   const textContent = await page.getTextContent();
