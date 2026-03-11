@@ -711,7 +711,7 @@ document.getElementById('comment-input').addEventListener('keydown', e => {
 
 function fmtTime(s) {
   return new Date(s + (s.includes('Z') ? '' : 'Z')).toLocaleString('ko-KR', {
-    month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'
+    month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'
   });
 }
 
@@ -754,14 +754,16 @@ function renderSidebar() {
           ${canDelete ? `<button class="ann-delete-btn" data-id="${ann.id}" title="Delete">✕</button>` : ''}
         </span>
       </div>
+      <div class="ann-time">${fmtTime(ann.created_at)}</div>
       ${previewText ? `<div class="ann-text">${escHtml(previewText)}</div>` : ''}
     `;
 
-    // click → scroll to page
+    // click → open comment panel (and scroll to page)
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('ann-delete-btn')) return;
       const wrapper = document.querySelector(`.page-wrapper[data-page="${ann.page}"]`);
       if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      openCommentPanel(ann);
     });
 
     list.appendChild(item);
