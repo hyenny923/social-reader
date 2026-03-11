@@ -703,7 +703,7 @@ document.getElementById('comment-submit').addEventListener('click', async () => 
 });
 
 document.getElementById('comment-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     document.getElementById('comment-submit').click();
   }
