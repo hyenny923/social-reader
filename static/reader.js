@@ -17,6 +17,9 @@ let ws               = null;
 let activeCommentAnn = null;
 const recentlySavedIds = new Set(); // 내가 방금 저장한 ID → WS 중복 방지
 
+let zoomLevel        = 1.0;   // 배율 (1.0 = 화면 자동 맞춤)
+let _zoomTimer       = null;  // debounce 타이머
+
 // ── Tool selection ─────────────────────────────────────────────────────────────
 const TOOLS = ['select', 'highlight', 'underline', 'note', 'erase'];
 
@@ -32,6 +35,11 @@ function setTool(name) {
     el.classList.remove('note-mode', 'erase-mode');
     if (name === 'note')  el.classList.add('note-mode');
     if (name === 'erase') el.classList.add('erase-mode');
+  });
+  // highlight/underline 모드: textLayer 위 커서를 crosshair로 변경
+  // (스캔 논문에서 드래그 가능함을 시각적으로 안내)
+  document.querySelectorAll('.textLayer').forEach(el => {
+    el.style.cursor = (name === 'highlight' || name === 'underline') ? 'crosshair' : '';
   });
 }
 TOOLS.forEach(t => document.getElementById(`tool-${t}`).addEventListener('click', () => setTool(t)));
@@ -86,28 +94,28 @@ function mergeRectsPerLine(domRects) {
   const sorted = [...domRects].sort((a, b) => a.top - b.top || a.left - b.left);
 
   const lines = [];
-  let current = null;
+  let cur = null;
 
   for (const r of sorted) {
-    if (!current) {
-      current = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    if (!cur) {
+      cur = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
       continue;
     }
-    // 같은 줄 판단: Y 중심이 현재 줄 범위 안에 있으면 같은 줄
-    const rMid = r.top + r.height / 2;
-    if (rMid >= current.top - 2 && rMid <= current.bottom + 2) {
-      // 같은 줄 → 좌우로 확장
-      current.left   = Math.min(current.left,   r.left);
-      current.right  = Math.max(current.right,  r.right);
-      current.top    = Math.min(current.top,    r.top);
-      current.bottom = Math.max(current.bottom, r.bottom);
+    // 같은 줄 판단: 세로 겹침이 각 rect 높이의 30% 이상이면 같은 줄
+    // (절대 픽셀 tolerance 대신 비율 기준으로 폰트 크기에 무관하게 동작)
+    const overlap = Math.min(cur.bottom, r.bottom) - Math.max(cur.top, r.top);
+    const minH    = Math.min(cur.bottom - cur.top, r.height);
+    if (overlap > minH * 0.3) {
+      cur.left   = Math.min(cur.left,   r.left);
+      cur.right  = Math.max(cur.right,  r.right);
+      cur.top    = Math.min(cur.top,    r.top);
+      cur.bottom = Math.max(cur.bottom, r.bottom);
     } else {
-      // 새로운 줄
-      lines.push(current);
-      current = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+      lines.push(cur);
+      cur = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
     }
   }
-  if (current) lines.push(current);
+  if (cur) lines.push(cur);
 
   // DOMRect 형태로 변환
   return lines.map(l => ({
@@ -116,6 +124,34 @@ function mergeRectsPerLine(domRects) {
     width:  l.right - l.left,
     height: l.bottom - l.top,
   }));
+}
+
+// 이미 정규화된 rects(0~1 좌표)를 같은 줄끼리 병합
+// → DB에 잘게 저장된 기존 annotations도 부드럽게 렌더링
+function mergeNormalizedRects(nrects) {
+  if (!nrects.length) return nrects;
+  const sorted = [...nrects].sort((a, b) => a.y - b.y || a.x - b.x);
+  const lines = [];
+  let cur = null;
+  for (const r of sorted) {
+    if (!cur) {
+      cur = { x: r.x, top: r.y, bottom: r.y + r.h, right: r.x + r.w };
+      continue;
+    }
+    const overlap = Math.min(cur.bottom, r.y + r.h) - Math.max(cur.top, r.y);
+    const minH    = Math.min(cur.bottom - cur.top, r.h);
+    if (overlap > minH * 0.3) {
+      cur.x      = Math.min(cur.x,      r.x);
+      cur.right  = Math.max(cur.right,  r.x + r.w);
+      cur.top    = Math.min(cur.top,    r.y);
+      cur.bottom = Math.max(cur.bottom, r.y + r.h);
+    } else {
+      lines.push(cur);
+      cur = { x: r.x, top: r.y, bottom: r.y + r.h, right: r.x + r.w };
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.map(l => ({ x: l.x, y: l.top, w: l.right - l.x, h: l.bottom - l.top }));
 }
 
 function toPixels(nr, container) {
@@ -138,21 +174,62 @@ async function loadPDF() {
       httpHeaders: { 'Authorization': `Bearer ${token}` },
     }).promise;
 
-    document.getElementById('pdf-viewer').innerHTML = '';
-    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-      await renderPage(pageNum);
-    }
+    await renderAllPages();
   } catch (err) {
     document.getElementById('pdf-viewer').innerHTML =
       `<p style="color:var(--danger);padding:20px">Failed to load PDF: ${err.message}</p>`;
   }
 }
 
+// 현재 zoom 배율로 전체 페이지 재렌더링
+async function renderAllPages() {
+  const viewer = document.getElementById('pdf-viewer');
+  // 스크롤 위치 기억 → 재렌더 후 복원
+  const scrollTop = viewer.scrollTop;
+  viewer.innerHTML = '';
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    await renderPage(pageNum);
+  }
+  renderAllAnnotations();
+  viewer.scrollTop = scrollTop;
+}
+
+// ── Zoom ───────────────────────────────────────────────────────────────────────
+function setZoom(level) {
+  zoomLevel = Math.min(Math.max(level, 0.4), 4.0);
+  document.getElementById('zoom-display').textContent = `${Math.round(zoomLevel * 100)}%`;
+  if (_zoomTimer) clearTimeout(_zoomTimer);
+  _zoomTimer = setTimeout(() => {
+    if (pdfDoc) renderAllPages();
+  }, 250);
+}
+
+document.getElementById('zoom-in') .addEventListener('click', () => setZoom(zoomLevel + 0.25));
+document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoomLevel - 0.25));
+document.getElementById('zoom-fit').addEventListener('click', () => setZoom(1.0));
+
+// 키보드 단축키: Ctrl/Cmd + +/-/0
+document.addEventListener('keydown', (e) => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(zoomLevel + 0.25); }
+  if (e.key === '-')                  { e.preventDefault(); setZoom(zoomLevel - 0.25); }
+  if (e.key === '0')                  { e.preventDefault(); setZoom(1.0); }
+});
+
+// 창 크기 변경 시 재렌더 (debounce)
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  if (_resizeTimer) clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { if (pdfDoc) renderAllPages(); }, 400);
+});
+
 async function renderPage(pageNum) {
   const page    = await pdfDoc.getPage(pageNum);
   const viewer  = document.getElementById('pdf-viewer');
   const dpr     = window.devicePixelRatio || 1;
-  const scale   = Math.min((viewer.clientWidth - 40) / page.getViewport({ scale: 1 }).width, 2.0);
+  // 화면 너비 기준 자동 맞춤 × 사용자 zoom 배율
+  const baseScale = (viewer.clientWidth - 40) / page.getViewport({ scale: 1 }).width;
+  const scale     = baseScale * zoomLevel;
   const viewport = page.getViewport({ scale });
 
   // wrapper — CSS size = 논리 픽셀
@@ -192,7 +269,7 @@ async function renderPage(pageNum) {
   ctx.scale(dpr, dpr);
   await page.render({ canvasContext: ctx, viewport }).promise;
 
-  // render text layer
+  // render text layer (PDF.js 기본)
   const textContent = await page.getTextContent();
   await pdfjsLib.renderTextLayer({
     textContentSource: textContent,
@@ -201,8 +278,16 @@ async function renderPage(pageNum) {
     textDivs: [],
   }).promise;
 
+  // 서버 텍스트 레이어로 교체 시도 (인코딩 깨진 PDF 대응)
+  applyServerTextLayer(textLayer, pageNum, viewport.width, viewport.height);
+
   // attach event listeners
   setupPageEvents(wrapper, svg, pageNum);
+
+  // 현재 툴 상태를 새 페이지에도 반영
+  if (currentTool === 'note')  svg.classList.add('note-mode');
+  if (currentTool === 'erase') svg.classList.add('erase-mode');
+  if (currentTool === 'highlight' || currentTool === 'underline') textLayer.style.cursor = 'crosshair';
 
   // page_view logging: fire once when page enters viewport
   const pageObserver = new IntersectionObserver((entries) => {
@@ -218,31 +303,108 @@ async function renderPage(pageNum) {
 
 // ── Page events ────────────────────────────────────────────────────────────────
 function setupPageEvents(wrapper, svg, pageNum) {
-  // Highlight / Underline: capture text selection on mouseup
-  wrapper.addEventListener('mouseup', () => {
+  let dragStart   = null;
+  let dragPreview = null;
+
+  // ── mousedown: drag 시작점 기록 ──────────────────────────────────────────
+  wrapper.addEventListener('mousedown', (e) => {
     if (currentTool !== 'highlight' && currentTool !== 'underline') return;
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
-    const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
-    if (!rawRects.length) return;
-
-    const mergedRects = mergeRectsPerLine(rawRects);
-    const rects = mergedRects.map(r => normalizeRect(r, wrapper));
-    const selectedText = sel.toString().trim().slice(0, 200);
-    sel.removeAllRanges();
-
-    saveAnnotation(currentTool, pageNum, {
-      rects,
-      color: currentColor,
-      selectedText,
-    });
+    const r = wrapper.getBoundingClientRect();
+    dragStart = { x: e.clientX - r.left, y: e.clientY - r.top };
   });
 
-  // Note: click on wrapper (SVG는 pointer-events:none이므로 wrapper로 이벤트 전달됨)
+  // ── mousemove: 텍스트 선택이 없으면 드래그 프리뷰 표시 ──────────────────
+  wrapper.addEventListener('mousemove', (e) => {
+    if (!dragStart) return;
+    if (currentTool !== 'highlight' && currentTool !== 'underline') return;
+
+    const r    = wrapper.getBoundingClientRect();
+    const curX = e.clientX - r.left;
+    const curY = e.clientY - r.top;
+    const dist = Math.max(Math.abs(curX - dragStart.x), Math.abs(curY - dragStart.y));
+
+    // 텍스트 선택이 진행 중이면 드래그 프리뷰 억제
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) {
+      if (dragPreview) { dragPreview.remove(); dragPreview = null; }
+      return;
+    }
+
+    // 8px 이상 드래그해야 프리뷰 표시 (단순 클릭과 구분)
+    if (dist < 8) return;
+
+    if (!dragPreview) {
+      dragPreview = document.createElement('div');
+      dragPreview.className = 'drag-highlight-preview';
+      wrapper.appendChild(dragPreview);
+    }
+
+    const x = Math.min(dragStart.x, curX);
+    const y = Math.min(dragStart.y, curY);
+    const w = Math.abs(curX - dragStart.x);
+    const h = Math.abs(curY - dragStart.y);
+    dragPreview.style.left   = x + 'px';
+    dragPreview.style.top    = y + 'px';
+    dragPreview.style.width  = w + 'px';
+    dragPreview.style.height = h + 'px';
+    dragPreview.style.background = currentColor;
+  });
+
+  // ── mouseup: 텍스트 선택 우선, 없으면 드래그 영역으로 폴백 ─────────────
+  wrapper.addEventListener('mouseup', (e) => {
+    if (currentTool !== 'highlight' && currentTool !== 'underline') return;
+
+    // 드래그 프리뷰 정리
+    if (dragPreview) { dragPreview.remove(); dragPreview = null; }
+
+    const sel = window.getSelection();
+
+    // 1) 텍스트 선택이 있으면 기존 방식으로 처리
+    if (sel && !sel.isCollapsed) {
+      const range    = sel.getRangeAt(0);
+      const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
+      if (rawRects.length) {
+        const rects       = mergeRectsPerLine(rawRects).map(r => normalizeRect(r, wrapper));
+        const selectedText = sel.toString().trim().slice(0, 200);
+        sel.removeAllRanges();
+        dragStart = null;
+        saveAnnotation(currentTool, pageNum, { rects, color: currentColor, selectedText });
+        return;
+      }
+      sel.removeAllRanges();
+    }
+
+    // 2) 텍스트 선택 실패 → 드래그 영역으로 폴백 (스캔 / 인코딩 깨진 논문 대응)
+    if (!dragStart) return;
+    const r    = wrapper.getBoundingClientRect();
+    const endX = e.clientX - r.left;
+    const endY = e.clientY - r.top;
+    const dist = Math.max(Math.abs(endX - dragStart.x), Math.abs(endY - dragStart.y));
+
+    if (dist > 10) {
+      const x  = Math.min(dragStart.x, endX);
+      const y  = Math.min(dragStart.y, endY);
+      const w  = Math.abs(endX - dragStart.x);
+      const h  = Math.abs(endY - dragStart.y);
+      const nr = normalizeRect(
+        { left: x + r.left, top: y + r.top, width: w, height: h },
+        wrapper
+      );
+      saveAnnotation(currentTool, pageNum, { rects: [nr], color: currentColor, selectedText: '' });
+    } else {
+      // 단순 클릭 → 텍스트 추출 불가 PDF임을 첫 번째 실패 시 한 번만 안내
+      if (!setupPageEvents._hintShown) {
+        setupPageEvents._hintShown = true;
+        showToast('텍스트 선택이 안 되는 PDF입니다. 드래그로 영역을 직접 지정해 하이라이트할 수 있어요.');
+      }
+    }
+    dragStart = null;
+  });
+
+  // ── Note: click on wrapper ───────────────────────────────────────────────
   wrapper.addEventListener('click', (e) => {
     if (currentTool !== 'note') return;
-    if (e.target.closest('.ann-group')) return; // 기존 어노테이션 클릭은 무시
+    if (e.target.closest('.ann-group')) return;
     const rect = wrapper.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top)  / rect.height;
@@ -251,6 +413,47 @@ function setupPageEvents(wrapper, svg, pageNum) {
     document.getElementById('note-modal').classList.add('open');
     document.getElementById('note-text').focus();
   });
+}
+
+// ── Server text layer (PyMuPDF) ────────────────────────────────────────────────
+// PDF.js가 텍스트를 못 읽는 PDF(커스텀 인코딩 등)에 대해
+// 서버에서 추출한 단어 위치로 텍스트 레이어를 교체한다.
+async function applyServerTextLayer(textLayer, pageNum, vpW, vpH) {
+  try {
+    const token = localStorage.getItem('token');
+    const res   = await fetch(`/api/articles/${articleId}/textlayer/${pageNum}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (!data.words || !data.words.length) return;
+
+    // PDF.js 텍스트 레이어에 텍스트가 있는지 확인
+    // 있으면 굳이 서버 레이어로 교체하지 않는다
+    const pdfText = textLayer.textContent.replace(/\s/g, '');
+    if (pdfText.length > 20) return;  // PDF.js가 이미 충분히 추출했으면 skip
+
+    // 서버 텍스트 레이어로 교체
+    textLayer.innerHTML = '';
+    for (const w of data.words) {
+      const span = document.createElement('span');
+      span.textContent = w.t;
+      span.style.cssText = [
+        `position:absolute`,
+        `left:${w.x * vpW}px`,
+        `top:${w.y * vpH}px`,
+        `width:${w.w * vpW}px`,
+        `height:${w.h * vpH}px`,
+        `font-size:${w.h * vpH * 0.9}px`,
+        `color:transparent`,
+        `cursor:text`,
+        `white-space:pre`,
+        `transform-origin:0 0`,
+      ].join(';');
+      textLayer.appendChild(span);
+    }
+  } catch (_) {
+    // 서버 텍스트 레이어 실패 시 PDF.js 레이어 유지
+  }
 }
 
 // ── Render annotations onto SVG ────────────────────────────────────────────────
@@ -274,7 +477,8 @@ function renderAnnotationsForPage(pageNum) {
 
     if (ann.type === 'highlight' || ann.type === 'underline') {
       const color = ann.data.color || '#FFD700';
-      ann.data.rects.forEach(nr => {
+      const rects = mergeNormalizedRects(ann.data.rects);
+      rects.forEach(nr => {
         const px = toPixels(nr, wrapper);
         if (ann.type === 'highlight') {
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -300,7 +504,7 @@ function renderAnnotationsForPage(pageNum) {
       });
 
       // attribution border on left
-      const firstPx = toPixels(ann.data.rects[0], wrapper);
+      const firstPx = toPixels(rects[0], wrapper);
       const badge = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       badge.setAttribute('x', firstPx.x - 3);
       badge.setAttribute('y', firstPx.y);

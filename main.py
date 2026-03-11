@@ -12,7 +12,10 @@ from typing import Optional, Dict, Set
 import bcrypt
 import jwt
 import aiosqlite
-import asyncpg
+try:
+    import asyncpg
+except ImportError:
+    asyncpg = None
 from fastapi import (
     FastAPI, HTTPException, UploadFile, File,
     WebSocket, WebSocketDisconnect, Form, Request
@@ -31,7 +34,7 @@ UPLOAD_DIR = Path("uploads")
 DB_PATH = os.getenv("DB_PATH", "social_reader.db")
 NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
 
-neon_pool: Optional[asyncpg.Pool] = None
+neon_pool = None
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -145,8 +148,8 @@ async def init_db():
 
 async def init_neon():
     global neon_pool
-    if not NEON_DATABASE_URL:
-        print("NEON_DATABASE_URL not set, logging disabled")
+    if not asyncpg or not NEON_DATABASE_URL:
+        print("NEON_DATABASE_URL not set or asyncpg unavailable, logging disabled")
         return
     try:
         # Strip sslmode from URL and pass ssl='require' explicitly for asyncpg compatibility
@@ -411,6 +414,40 @@ async def delete_article(article_id: int, request: Request):
     if pdf_path.exists():
         pdf_path.unlink()
     return {"ok": True}
+
+
+@app.get("/api/articles/{article_id}/textlayer/{page_num}")
+async def get_textlayer(article_id: int, page_num: int, request: Request):
+    """PyMuPDF로 텍스트 레이어 추출 – 인코딩이 깨진 PDF 대응"""
+    await get_current_user(request)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT filename FROM articles WHERE id = ?", (article_id,))
+        row = await cursor.fetchone()
+        if not row:
+            raise HTTPException(404, "Article not found")
+    pdf_path = UPLOAD_DIR / row["filename"]
+    if not pdf_path.exists():
+        raise HTTPException(404, "PDF file not found")
+
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        if page_num < 1 or page_num > len(doc):
+            raise HTTPException(400, "Invalid page number")
+        page = doc[page_num - 1]
+        pw, ph = page.rect.width, page.rect.height
+        words = page.get_text("words")  # (x0,y0,x1,y1, text, block,line,word)
+        doc.close()
+        result = [
+            {"x": w[0]/pw, "y": w[1]/ph, "w": (w[2]-w[0])/pw, "h": (w[3]-w[1])/ph, "t": w[4]}
+            for w in words if w[4].strip()
+        ]
+        return {"words": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"words": [], "error": str(e)}
 
 
 @app.get("/api/articles/{article_id}/pdf")

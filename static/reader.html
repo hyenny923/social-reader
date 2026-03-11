@@ -19,21 +19,11 @@
     <div class="toolbar-sep"></div>
 
     <!-- Tools -->
-    <button class="tool-btn" id="tool-select" title="Select / Pan">
-      <span class="tool-icon">↖</span> <span>Select</span>
-    </button>
-    <button class="tool-btn" id="tool-highlight" title="Highlight text">
-      <span class="tool-icon">▌</span> <span>Highlight</span>
-    </button>
-    <button class="tool-btn" id="tool-underline" title="Underline text">
-      <span class="tool-icon">U̲</span> <span>Underline</span>
-    </button>
-    <button class="tool-btn" id="tool-note" title="Add a note">
-      <span class="tool-icon">✎</span> <span>Note</span>
-    </button>
-    <button class="tool-btn" id="tool-erase" title="Delete annotation (click on it)">
-      <span class="tool-icon">✕</span> <span>Erase</span>
-    </button>
+    <button class="tool-btn" id="tool-select"    title="Select">↖</button>
+    <button class="tool-btn" id="tool-highlight" title="Highlight">▌</button>
+    <button class="tool-btn" id="tool-underline" title="Underline">U̲</button>
+    <button class="tool-btn" id="tool-note"      title="Note">✎</button>
+    <button class="tool-btn" id="tool-erase"     title="Erase">✕</button>
 
     <div class="toolbar-sep"></div>
 
@@ -44,6 +34,16 @@
       <div class="color-swatch" data-color="#93C5FD" style="background:#93C5FD" title="Blue"></div>
       <div class="color-swatch" data-color="#FCA5A5" style="background:#FCA5A5" title="Red"></div>
       <div class="color-swatch" data-color="#C4B5FD" style="background:#C4B5FD" title="Purple"></div>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Zoom controls -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoom-out" title="축소 (−)">−</button>
+      <span id="zoom-display" class="zoom-display">100%</span>
+      <button class="zoom-btn" id="zoom-in"  title="확대 (+)">+</button>
+      <button class="zoom-btn zoom-fit-btn" id="zoom-fit" title="화면에 맞추기">⊡</button>
     </div>
 
     <div class="toolbar-sep"></div>
