@@ -102,11 +102,10 @@ function mergeRectsPerLine(domRects) {
       cur = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
       continue;
     }
-    // 같은 줄 판단: 세로 겹침이 각 rect 높이의 30% 이상이면 같은 줄
-    // (절대 픽셀 tolerance 대신 비율 기준으로 폰트 크기에 무관하게 동작)
+    // 같은 줄 판단: 세로 겹침이 1px 이상이면 같은 줄로 합침
+    // (0.3 비율 기준은 line-end span의 살짝 다른 Y로 인해 분리될 수 있어 완화)
     const overlap = Math.min(cur.bottom, r.bottom) - Math.max(cur.top, r.top);
-    const minH    = Math.min(cur.bottom - cur.top, r.height);
-    if (overlap > minH * 0.3) {
+    if (overlap > 1) {
       cur.left   = Math.min(cur.left,   r.left);
       cur.right  = Math.max(cur.right,  r.right);
       cur.top    = Math.min(cur.top,    r.top);
@@ -140,8 +139,7 @@ function mergeNormalizedRects(nrects) {
       continue;
     }
     const overlap = Math.min(cur.bottom, r.y + r.h) - Math.max(cur.top, r.y);
-    const minH    = Math.min(cur.bottom - cur.top, r.h);
-    if (overlap > minH * 0.3) {
+    if (overlap > 0.002) {  // normalized: ~1px at typical page height
       cur.x      = Math.min(cur.x,      r.x);
       cur.right  = Math.max(cur.right,  r.x + r.w);
       cur.top    = Math.min(cur.top,    r.y);
@@ -253,6 +251,7 @@ async function renderPage(pageNum) {
   textLayer.className = 'textLayer';
   textLayer.style.width  = `${viewport.width}px`;
   textLayer.style.height = `${viewport.height}px`;
+  textLayer.style.setProperty('--scale-factor', viewport.scale);  // PDF.js v3 required
   wrapper.appendChild(textLayer);
 
   // annotation SVG layer
@@ -363,9 +362,9 @@ function setupPageEvents(wrapper, svg, pageNum) {
     // 1) 텍스트 선택이 있으면 기존 방식으로 처리
     if (sel && !sel.isCollapsed) {
       const range    = sel.getRangeAt(0);
-      const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
+      const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 0.5 && r.height > 0.5);
       if (rawRects.length) {
-        const rects       = mergeRectsPerLine(rawRects).map(r => normalizeRect(r, wrapper));
+        const rects = mergeRectsPerLine(rawRects).map(r => normalizeRect(r, wrapper));
         const selectedText = sel.toString().trim().slice(0, 200);
         sel.removeAllRanges();
         dragStart = null;
