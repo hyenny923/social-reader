@@ -152,9 +152,8 @@ async def init_neon():
         print("NEON_DATABASE_URL not set or asyncpg unavailable, logging disabled")
         return
     try:
-        # Strip sslmode from URL and pass ssl='require' explicitly for asyncpg compatibility
-        import re
-        clean_url = re.sub(r'[?&]sslmode=\w+', '', NEON_DATABASE_URL)
+        # Strip all query params (sslmode, channel_binding, etc.) — asyncpg uses ssl= kwarg
+        clean_url = NEON_DATABASE_URL.split('?')[0]
         neon_pool = await asyncpg.create_pool(clean_url, min_size=1, max_size=5, ssl='require')
         async with neon_pool.acquire() as conn:
             await conn.execute("""
