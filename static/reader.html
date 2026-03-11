@@ -11,41 +11,37 @@
 
   <!-- Toolbar -->
   <div class="reader-toolbar">
-    <button class="btn-back" onclick="history.length>1?history.back():location.href='/articles'">
-      ← Articles
-    </button>
-    <div class="toolbar-sep"></div>
-    <div class="toolbar-title" id="article-title">Loading…</div>
+    <!-- 좌: 뒤로가기 -->
+    <button class="btn-back" onclick="history.length>1?history.back():location.href='/articles'">← Articles</button>
     <div class="toolbar-sep"></div>
 
-    <!-- Tools -->
-    <button class="tool-btn" id="tool-select"    title="Select">↖</button>
-    <button class="tool-btn" id="tool-highlight" title="Highlight">▌</button>
-    <button class="tool-btn" id="tool-underline" title="Underline">U̲</button>
-    <button class="tool-btn" id="tool-note"      title="Note">✎</button>
-    <button class="tool-btn" id="tool-erase"     title="Erase">✕</button>
-
-    <div class="toolbar-sep"></div>
-
-    <!-- Color swatches -->
-    <div class="color-swatches" id="color-swatches">
-      <div class="color-swatch selected" data-color="#FFD700" style="background:#FFD700" title="Yellow"></div>
-      <div class="color-swatch" data-color="#86EFAC" style="background:#86EFAC" title="Green"></div>
-      <div class="color-swatch" data-color="#93C5FD" style="background:#93C5FD" title="Blue"></div>
-      <div class="color-swatch" data-color="#FCA5A5" style="background:#FCA5A5" title="Red"></div>
-      <div class="color-swatch" data-color="#C4B5FD" style="background:#C4B5FD" title="Purple"></div>
+    <!-- 중간: 제목 + 도구 (공간 부족 시 스크롤) -->
+    <div class="toolbar-center">
+      <div class="toolbar-title" id="article-title">Loading…</div>
+      <div class="toolbar-sep"></div>
+      <button class="tool-btn" id="tool-select"    title="Select">↖</button>
+      <button class="tool-btn" id="tool-highlight" title="Highlight">▌</button>
+      <button class="tool-btn" id="tool-underline" title="Underline">U̲</button>
+      <button class="tool-btn" id="tool-note"      title="Note">✎</button>
+      <button class="tool-btn" id="tool-erase"     title="Erase">✕</button>
+      <div class="toolbar-sep"></div>
+      <div class="color-swatches" id="color-swatches">
+        <div class="color-swatch selected" data-color="#FFD700" style="background:#FFD700" title="Yellow"></div>
+        <div class="color-swatch" data-color="#86EFAC" style="background:#86EFAC" title="Green"></div>
+        <div class="color-swatch" data-color="#93C5FD" style="background:#93C5FD" title="Blue"></div>
+        <div class="color-swatch" data-color="#FCA5A5" style="background:#FCA5A5" title="Red"></div>
+        <div class="color-swatch" data-color="#C4B5FD" style="background:#C4B5FD" title="Purple"></div>
+      </div>
     </div>
 
+    <!-- 우: 줌 + 사이드바 (항상 표시) -->
     <div class="toolbar-sep"></div>
-
-    <!-- Zoom controls -->
     <div class="zoom-controls">
       <button class="zoom-btn" id="zoom-out" title="축소 (−)">−</button>
       <span id="zoom-display" class="zoom-display">100%</span>
       <button class="zoom-btn" id="zoom-in"  title="확대 (+)">+</button>
       <button class="zoom-btn zoom-fit-btn" id="zoom-fit" title="화면에 맞추기">⊡</button>
     </div>
-
     <div class="toolbar-sep"></div>
     <button class="btn-sidebar-toggle" id="sidebar-toggle" title="Toggle annotation panel">☰</button>
   </div>
