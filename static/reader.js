@@ -1,3 +1,4 @@
+// VERSION: 2026-03-11-v3
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 if (!requireAuth()) throw new Error('redirect');
 
