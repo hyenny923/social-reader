@@ -695,10 +695,6 @@ document.getElementById('comment-submit').addEventListener('click', async () => 
   try {
     await API.post('/api/comments', { annotation_id: activeCommentAnn.id, text });
     await loadComments(activeCommentAnn.id);
-    logEvent('comment_create', {
-      article_id: articleId, page: activeCommentAnn.page,
-      metadata: { annotation_type: activeCommentAnn.type },
-    });
   } catch (err) { showToast('댓글 저장 실패: ' + err.message); }
 });
 
@@ -797,10 +793,6 @@ async function saveAnnotation(type, page, data) {
     annotations.push(ann);
     renderAnnotationsForPage(page);
     renderSidebar();
-    logEvent('annotation_create', {
-      article_id: articleId, page,
-      metadata: { type, selected_text: data.selectedText || null },
-    });
   } catch (err) {
     showToast('Failed to save annotation: ' + err.message);
   }

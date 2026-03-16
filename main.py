@@ -135,12 +135,18 @@ async def init_db():
                 annotation_id TEXT NOT NULL,
                 user_id INTEGER NOT NULL,
                 text TEXT NOT NULL,
+                parent_id TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
         # Migration: add class_id to articles
         try:
             await db.execute("ALTER TABLE articles ADD COLUMN class_id INTEGER")
+        except Exception:
+            pass
+        # Migration: add parent_id to annotation_comments
+        try:
+            await db.execute("ALTER TABLE annotation_comments ADD COLUMN parent_id TEXT")
         except Exception:
             pass
         await db.commit()
@@ -168,10 +174,23 @@ async def init_neon():
                     article_title TEXT,
                     class_id INTEGER,
                     page INTEGER,
+                    annotation_type TEXT,
+                    content TEXT,
+                    parent_comment_id TEXT,
                     metadata JSONB,
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             """)
+            # Migration: add new columns if table already exists
+            for col, col_type in [
+                ("annotation_type", "TEXT"),
+                ("content", "TEXT"),
+                ("parent_comment_id", "TEXT"),
+            ]:
+                try:
+                    await conn.execute(f"ALTER TABLE web_logs ADD COLUMN {col} {col_type}")
+                except Exception:
+                    pass
         print("NeonDB connected ✓")
     except Exception as e:
         import traceback
@@ -281,6 +300,7 @@ class JoinClassRequest(BaseModel):
 class CreateCommentRequest(BaseModel):
     annotation_id: str
     text: str
+    parent_id: Optional[str] = None
 
 class LogEventRequest(BaseModel):
     event_type: str
@@ -290,6 +310,42 @@ class LogEventRequest(BaseModel):
     class_id: Optional[int] = None
     page: Optional[int] = None
     metadata: Optional[dict] = None
+
+
+# ─── Neon Log Helper ──────────────────────────────────────────────────────────
+
+async def neon_log(
+    user: dict,
+    event_type: str,
+    *,
+    article_id: int = None,
+    article_title: str = None,
+    class_id: int = None,
+    page: int = None,
+    annotation_type: str = None,
+    content: str = None,
+    parent_comment_id: str = None,
+    session_id: str = None,
+    metadata: dict = None,
+):
+    if not neon_pool:
+        return
+    try:
+        async with neon_pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO web_logs
+                    (session_id, user_id, username, display_name, event_type,
+                     article_id, article_title, class_id, page,
+                     annotation_type, content, parent_comment_id, metadata)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            """,
+                session_id, int(user["sub"]), user["username"], user["display_name"],
+                event_type, article_id, article_title, class_id, page,
+                annotation_type, content, parent_comment_id,
+                json.dumps(metadata) if metadata else None,
+            )
+    except Exception as e:
+        print(f"Neon log failed: {e}")
 
 
 # ─── Auth Routes ──────────────────────────────────────────────────────────────
@@ -527,6 +583,15 @@ async def create_annotation(ann: AnnotationCreate, request: Request):
         result["data"] = json.loads(result["data"])
 
     await manager.broadcast({"event": "annotation_added", "annotation": result}, ann.article_id)
+    content = result["data"].get("text") or result["data"].get("selectedText")
+    await neon_log(
+        user,
+        event_type="annotation_created",
+        article_id=ann.article_id,
+        page=ann.page,
+        annotation_type=ann.type,
+        content=content,
+    )
     return result
 
 
@@ -737,7 +802,7 @@ async def get_comments(annotation_id: str, request: Request):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("""
-            SELECT c.id, c.annotation_id, c.text, c.created_at,
+            SELECT c.id, c.annotation_id, c.parent_id, c.text, c.created_at,
                    u.display_name, u.username, u.id as user_id
             FROM annotation_comments c JOIN users u ON c.user_id = u.id
             WHERE c.annotation_id = ? ORDER BY c.created_at ASC
@@ -759,13 +824,20 @@ async def create_comment(req: CreateCommentRequest, request: Request):
         ann = await cursor.fetchone()
         if not ann:
             raise HTTPException(404, "Annotation not found")
+        if req.parent_id:
+            cursor = await db.execute(
+                "SELECT id FROM annotation_comments WHERE id = ? AND annotation_id = ?",
+                (req.parent_id, req.annotation_id),
+            )
+            if not await cursor.fetchone():
+                raise HTTPException(404, "Parent comment not found")
         await db.execute(
-            "INSERT INTO annotation_comments (id, annotation_id, user_id, text) VALUES (?, ?, ?, ?)",
-            (comment_id, req.annotation_id, user_id, req.text.strip()),
+            "INSERT INTO annotation_comments (id, annotation_id, user_id, text, parent_id) VALUES (?, ?, ?, ?, ?)",
+            (comment_id, req.annotation_id, user_id, req.text.strip(), req.parent_id),
         )
         await db.commit()
         cursor = await db.execute("""
-            SELECT c.id, c.annotation_id, c.text, c.created_at,
+            SELECT c.id, c.annotation_id, c.parent_id, c.text, c.created_at,
                    u.display_name, u.username, u.id as user_id
             FROM annotation_comments c JOIN users u ON c.user_id = u.id
             WHERE c.id = ?
@@ -773,6 +845,14 @@ async def create_comment(req: CreateCommentRequest, request: Request):
         result = dict(await cursor.fetchone())
     await manager.broadcast(
         {"event": "comment_added", "comment": result}, ann["article_id"]
+    )
+    await neon_log(
+        user,
+        event_type="comment_created",
+        article_id=ann["article_id"],
+        annotation_type="comment",
+        content=req.text.strip(),
+        parent_comment_id=req.parent_id,
     )
     return result
 
